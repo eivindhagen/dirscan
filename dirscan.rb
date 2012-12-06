@@ -8,6 +8,21 @@ require 'BinData'
 require 'etc'
 require 'digest'
 
+HASH_SRC_SPLIT = '+'
+HASH_SRC_JOIN = '+'
+
+def hash_src_humanize(hash_src)
+	hash_src.gsub('+', ' + ')
+end
+
+def string_sha256(string)
+	begin
+		Digest::SHA256.hexdigest(string)
+	rescue
+		''
+	end
+end
+
 def file_md5(file_path)
 	begin
 		Digest::MD5.file(file_path).hexdigest
@@ -49,13 +64,13 @@ def file_mtime(file)
 	end
 end
 
-def file_atime(file)
-	begin
-		File.atime(file).to_i
-	rescue
-		0
-	end
-end
+# def file_atime(file)
+# 	begin
+# 		File.atime(file).to_i
+# 	rescue
+# 		0
+# 	end
+# end
 
 def file_owner(file)
 	begin
@@ -95,157 +110,259 @@ def read_object(file)
 	return object
 end
 
+# replaces each <entry> found in the hash_template with it's corresponding value from the info hash
+def create_hash(template, info)
+	# puts "DEBUG template: #{template}"
+	# puts "DEBUG info: #{info.to_json}"
+	keys = template.split(HASH_SRC_SPLIT)
+	# puts "DEBUG keys: #{keys}"
+	values = keys.map{|k| info[k]}
+	hash_src = values.join(HASH_SRC_JOIN)
+	# puts "DEBUG hash_src: #{hash_src_humanize(hash_src)}"
+	hash = string_sha256(hash_src)
+	# puts "DEBUG hash: #{hash}"
+	return hash
+end
 
-def scan_recursive(index_file, dir_path)
+
+# scan a directory and all it's sub-directories (recursively)
+#
+# Consider this example directory tree:
+#   dir-a
+#     file-1
+#     symlink-x
+#     file-2
+#     dir-b
+#       file 3
+#
+# The records would be written in this order (dir records are written twice, first initial, then final):
+#   dir-a (initial)
+#   file-1
+#   symlink-x
+#   file-2
+#   dir-b (initial)
+#   file-3
+#   dir-b (final)
+#   dir-a (final)
+#
+def scan_recursive(index_file, scan_info, dir_path)
   base_path = Pathname.new(dir_path)
-  write_object(index_file, {
+
+  # write initial dir record
+  dir_info_initial = {
   	'type' => 'dir',
   	'dir_path' => dir_path,
+  	'name' => File.basename(dir_path),
   	'mode' => file_mode(dir_path),
   	'ctime' => file_ctime(dir_path),
   	'mtime' => file_mtime(dir_path),
-  	'atime' => file_atime(dir_path),
+  	# 'atime' => file_atime(dir_path),
   	'owner' => file_owner(dir_path),
   	'group' => file_group(dir_path),
-  	}
-  )
+  }
+
+  write_object(index_file, dir_info_initial)
 
   symlinks = []
   dirs = []
   files = []
 	content_size = 0
-
-	recursive = {
-		'content_size' => 0,
-		'symlink_count' => 0,
-		'dir_count' => 0,
-		'file_count' => 0,
-		'max_depth' => 0, # 0 means empty dir, 1 means the dir only contains files or symlinks, > 1 indicates subdirs
-	}
+	# content_hash_src = ''
+	# meta_hash_src = ''
+	content_hashes = []
+	meta_hashes = []
 
   Dir[File.join(base_path, '{*,.*}')].each do |full_path|
-    rel_path = Pathname.new(full_path).relative_path_from(base_path).to_s # .to_s converts from Pathname to actual string
-    case rel_path
+    name = Pathname.new(full_path).relative_path_from(base_path).to_s # .to_s converts from Pathname to actual string
+    case name
     when '.'	# current dir
     when '..'	# parent dir
     else
 
 			if File.symlink?(full_path)
-				symlinks << rel_path
+				symlinks << name
 
 				# get the sie of the symlink itself (not the size of what it's pointing at)
 		    size = File.lstat(full_path).size
-		    content_size += size
-				
-			  write_object(index_file, {
+				symlink_info = {
 			  	'type' => 'symlink',
-			  	'rel_path' => rel_path,
+			  	'name' => name,
 			  	'link_path' => File.readlink(full_path),
 			  	'size' => size,
 			  	'mode' => file_mode(full_path),
 			  	'ctime' => file_ctime(full_path),
 			  	'mtime' => file_mtime(full_path),
-			  	'atime' => file_atime(full_path),
+			  	# 'atime' => file_atime(full_path),
 			  	'owner' => file_owner(full_path),
 			  	'group' => file_group(full_path),
-			  })
+			  }
+			  symlink_info['hash'] = create_hash(scan_info['symlink_hash_template'], symlink_info)
+
+			  # accumulate
+		    content_size += size
+		    # meta_hash_src += symlink_info['hash']
+		    meta_hashes << symlink_info['hash']
+		    # content_hash does not exist for symlinks
+
+			  write_object(index_file, symlink_info)
 	    elsif Dir.exist?(full_path)
-	    	# recurse into sub dirs after completing this dir scan
-			  dirs << rel_path
+	    	# recurse into sub dirs after completing this dir scan, tally things up at the end...
+			  dirs << name
 			elsif File.exist?(full_path)
-				files << rel_path
+				files << name
 
 				# get this size of the file
 		    size = File.size(full_path)
-		    content_size += size
 
-			  write_object(index_file, {
+		    file_info = {
 			  	'type' => 'file',
-			  	'rel_path' => rel_path,
+			  	'name' => name,
 			  	'size' => size,
 			  	'mode' => file_mode(full_path),
 			  	'ctime' => file_ctime(full_path),
 			  	'mtime' => file_mtime(full_path),
-			  	'atime' => file_atime(full_path),
+			  	# 'atime' => file_atime(full_path),
 			  	'owner' => file_owner(full_path),
 			  	'group' => file_group(full_path),
 			  	'md5' => file_md5(full_path),
 			  	'sha256' => file_sha256(full_path),
-			  })
+			  }
+			  file_info['hash'] = create_hash(scan_info['file_hash_template'], file_info)
+
+			  # accumulate
+		    content_size += size
+		    # content_hash_src += file_info['sha256']
+		    # meta_hash_src += file_info['hash']
+		    content_hashes << file_info['sha256']
+		    meta_hashes << file_info['hash']
+
+			  write_object(index_file, file_info)
 			else
-			  write_object(index_file, {
+				unknown_info = {
 			  	'type' => 'unknown',
-			  	'rel_path' => rel_path
-			  })
+			  	'name' => name
+			  }
+			  write_object(index_file, unknown_info)
 			end
 		end
   end
 
-  # recursive stats = stats for this dir + stats for all subdirs
-	recursive['content_size'] = content_size
-	recursive['symlink_count'] = symlinks.count
-	recursive['dir_count'] = dirs.count
-	recursive['file_count'] = files.count
+  # recursive = stats for this dir + stats for all subdirs
+  #
+  # the properties inside 'recursive' are kept separate from the properties for just the current dir,
+  # so that we can report the simple 'this dir only' and also the full recursive status.
+	recursive = {
+		'content_size' => content_size,
+		'symlink_count' => symlinks.count,
+		'dir_count' => dirs.count,
+		'file_count' => files.count,
+		'max_depth' => 0, # 0 means empty dir, 1 means the dir only contains files or symlinks, > 1 indicates subdirs
+		# 'content_hash_src' => '',
+		# 'meta_hash_src' => '',
+		'content_hashes' => [],
+		'meta_hashes' => [],
+	}
+
 
   if dirs.count > 0
 	  dirs.each do |dir|
 	  	puts "Scanning subdir #{dir} of #{dir_path}"
-	  	scan = scan_recursive(index_file, File.join(dir_path, dir))
-	  	recursive['content_size'] += scan['recursive']['content_size']
-	  	recursive['symlink_count'] += scan['recursive']['symlink_count']
-	  	recursive['dir_count'] += scan['recursive']['dir_count']
-	  	recursive['file_count'] += scan['recursive']['file_count']
-	  	recursive['max_depth'] = [recursive['max_depth'], 1 + scan['recursive']['max_depth']].max
+	  	sub_dir_info = scan_recursive(index_file, scan_info, File.join(dir_path, dir))
+
+	    #
+	    # accumulation (for current level onlY)
+	    #
+
+	  	# accumulate folder meta-data
+	    # meta_hash_src += sub_dir_info['hash']
+	    meta_hashes << sub_dir_info['hash']
+	    # content_hash does not make sense for a dir at this level (since we don't recurse, it's effecively empty)
+
+	    #
+	    # recursive accumulation
+	    #
+
+	  	# accumulate sizes and counts
+	  	recursive['content_size'] += sub_dir_info['recursive']['content_size']
+	  	recursive['symlink_count'] += sub_dir_info['recursive']['symlink_count']
+	  	recursive['dir_count'] += sub_dir_info['recursive']['dir_count']
+	  	recursive['file_count'] += sub_dir_info['recursive']['file_count']
+	  	recursive['max_depth'] = [recursive['max_depth'], 1 + sub_dir_info['recursive']['max_depth']].max
+	  	
+	  	# accumulate hash source strings
+	    # recursive['content_hash_src'] += sub_dir_info['recursive']['content_hash']
+	    # recursive['meta_hash_src'] += sub_dir_info['recursive']['meta_hash']
+	    recursive['content_hashes'] << sub_dir_info['recursive']['content_hash']
+	    recursive['meta_hashes'] << sub_dir_info['recursive']['meta_hash']
 	  end
 	else
 		max_depth = 1 if files.count > 0 || symlinks.count > 0
 	end
 
-  # write a new record that contains the content_size
-  write_object(
-  	index_file, {
-  		'type' => 'dir',
-  		'dir_path' => dir_path,
-  		'content_size' => content_size,
-  		'recursive' => recursive
-  	}
-  )
+	# finalize the hashes
+	content_hash_src = content_hashes.join(HASH_SRC_JOIN)
+	meta_hash_src = meta_hashes.join(HASH_SRC_JOIN)
+	content_hash = string_sha256(content_hash_src)
+	meta_hash = string_sha256(meta_hash_src)
 
-  # return the total size of all the files in the folder (recursively)
-  return 	result = {
+	# finalize the recursive hashes (from their source strings)
+	recursive['content_hash_src'] = recursive['content_hashes'].join(HASH_SRC_JOIN)
+	recursive['meta_hash_src'] = recursive['meta_hashes'].join(HASH_SRC_JOIN)
+	recursive['content_hash'] = string_sha256(recursive['content_hash_src'])
+	recursive['meta_hash'] = string_sha256(recursive['meta_hash_src'])
+
+  # write final dir record
+  dir_info_final = dir_info_initial.merge({
 		'symlink_count' => symlinks.count,
 		'dir_count' => dirs.count,
 		'file_count' => files.count,
 		'content_size' => content_size,
+		# hashes
+		'content_hash_src' => content_hash_src,
+		'meta_hash_src' => meta_hash_src,
+		'content_hash' => content_hash,
+		'meta_hash' => meta_hash,
+		# recursive summary
 		'recursive' => recursive,
-	}
+	})
+ 	dir_info_final['hash'] = create_hash(scan_info['dir_hash_template'], dir_info_final)
+  write_object(index_file, dir_info_final)
+
+  # return the summary of all the entries in the folder (including recursive summary)
+  return dir_info_final
 end
 
-def dir_scan(scan_root)
+def dir_scan(scan_root, index_path)
 	# turn scan_root into the cononical form, making it absolute, with no symlinks
 	real_scan_root = Pathname.new(scan_root).realpath
 
 	host_name = Socket.gethostname
-	timestamp = Time.now.to_i
-	index_path = File.join real_scan_root, ".dirscan_#{timestamp}"
+	timestamp = 4 # Time.now.to_i
+	index_path = File.join real_scan_root, ".dirscan_#{timestamp}" unless index_path
 
 	puts "Host name: #{host_name}"
 	puts "Scan root: #{real_scan_root}"
 	puts "Index path: #{index_path}"
 	
-	# create the index file
-	File.open(index_path, 'wb') do |index_file|
-		# write dirscan meta-data
-		write_object(index_file, {
+	# create scan object, contains meta-data applicable to the entire scan
+	scan_info = {
 			'type' => 'dirscan',
 			'host_name' => host_name,
 			'scan_root' => real_scan_root,
 			'timestamp' => Time.now.to_i,
 			'index_path' => index_path,
-		})
+			'symlink_hash_template' => 'name+mode+owner+group+ctime+mtime+size',	# size of symlink itself, not the target
+			'file_hash_template' 		=> 'name+mode+owner+group+ctime+mtime+size+sha256',	# size and content hash
+			'dir_hash_template' 		=> 'name+mode+owner+group+ctime+mtime+content_size+content_hash+meta_hash',	# size/hash of dir's content
+		}
+
+	# create the index file
+	File.open(index_path, 'wb') do |index_file|
+		# write dirscan meta-data
+		write_object(index_file, scan_info)
 
 		# scan recursively
-		scan = scan_recursive(index_file, real_scan_root)
+		scan = scan_recursive(index_file, scan_info, real_scan_root)
 
 		puts "scan results:"
 		puts scan.to_yaml
@@ -324,7 +441,8 @@ case ARGV[0]
 when 's'
 	# scan dir, creates an index file
 	scan_root = ARGV[1]
-	index_path = dir_scan(scan_root)
+	index_path = ARGV[2]
+	index_path = dir_scan(scan_root, index_path)
 when 'v'
 	# verify index file, compares with original dir
 	index_path = ARGV[1]
@@ -334,6 +452,17 @@ when 'u'
 	index_path = ARGV[1]
 	text_path = ARGV[2]
 	index_unpack(index_path, text_path)
+when 't'
+	info = {
+		'a' => 'A',
+		'b' => 'BB',
+		'c' => 'CCC',
+	}
+	puts "info: #{info.to_json}"
+	hash_template = 'a+b+c'
+	puts "hash_templage: #{hash_template}"
+	hash = create_hash(hash_template, info)
+	puts "hash: #{hash}"
 end
 
 
