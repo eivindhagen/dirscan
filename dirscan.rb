@@ -5,16 +5,76 @@ require 'pathname'
 require 'json'
 require 'yaml'
 require 'BinData'
+require 'etc'
+require 'digest'
 
 def file_md5(file_path)
-	require 'digest/md5'
-	Digest::MD5.file(file_path).hexdigest
-  # digest = Digest::MD5.hexdigest(File.read(file_path))
+	begin
+		Digest::MD5.file(file_path).hexdigest
+	rescue
+		''
+	end
 end
 
 def file_sha256(file_path)
-	Digest::SHA256.file(file_path).hexdigest
+	begin
+		Digest::SHA256.file(file_path).hexdigest
+	rescue
+		''
+	end
 end
+
+def file_mode(file)
+	begin
+		mode_integer = File.lstat(file).mode & 0777
+		mode_octal_string = mode_integer.to_s(8)
+	rescue
+		''
+	end
+end
+
+def file_ctime(file)
+	begin
+		File.ctime(file).to_i
+	rescue
+		0
+	end
+end
+
+def file_mtime(file)
+	begin
+		File.mtime(file).to_i
+	rescue
+		0
+	end
+end
+
+def file_atime(file)
+	begin
+		File.atime(file).to_i
+	rescue
+		0
+	end
+end
+
+def file_owner(file)
+	begin
+		uid = File.stat(file).uid
+		owner_name = Etc.getpwuid(uid).name
+	rescue
+		'unknown'
+	end
+end
+
+def file_group(file)
+	begin
+		gid = File.stat(file).gid
+		group_name = Etc.getgrgid(gid).name
+	rescue
+		'unknown'
+	end
+end
+
 
 def write_object(file, object)
 	# file.write object.to_json + "\n\n"
@@ -35,9 +95,20 @@ def read_object(file)
 	return object
 end
 
+
 def scan_recursive(index_file, dir_path)
   base_path = Pathname.new(dir_path)
-  write_object(index_file, {'type' => 'dir', 'dir_path' => dir_path})
+  write_object(index_file, {
+  	'type' => 'dir',
+  	'dir_path' => dir_path,
+  	'mode' => file_mode(dir_path),
+  	'ctime' => file_ctime(dir_path),
+  	'mtime' => file_mtime(dir_path),
+  	'atime' => file_atime(dir_path),
+  	'owner' => file_owner(dir_path),
+  	'group' => file_group(dir_path),
+  	}
+  )
 
   symlinks = []
   dirs = []
@@ -68,9 +139,15 @@ def scan_recursive(index_file, dir_path)
 				
 			  write_object(index_file, {
 			  	'type' => 'symlink',
-			  	'size' => size,
 			  	'rel_path' => rel_path,
 			  	'link_path' => File.readlink(full_path),
+			  	'size' => size,
+			  	'mode' => file_mode(full_path),
+			  	'ctime' => file_ctime(full_path),
+			  	'mtime' => file_mtime(full_path),
+			  	'atime' => file_atime(full_path),
+			  	'owner' => file_owner(full_path),
+			  	'group' => file_group(full_path),
 			  })
 	    elsif Dir.exist?(full_path)
 	    	# recurse into sub dirs after completing this dir scan
@@ -84,10 +161,16 @@ def scan_recursive(index_file, dir_path)
 
 			  write_object(index_file, {
 			  	'type' => 'file',
+			  	'rel_path' => rel_path,
 			  	'size' => size,
+			  	'mode' => file_mode(full_path),
+			  	'ctime' => file_ctime(full_path),
+			  	'mtime' => file_mtime(full_path),
+			  	'atime' => file_atime(full_path),
+			  	'owner' => file_owner(full_path),
+			  	'group' => file_group(full_path),
 			  	'md5' => file_md5(full_path),
 			  	'sha256' => file_sha256(full_path),
-			  	'rel_path' => rel_path
 			  })
 			else
 			  write_object(index_file, {
@@ -143,7 +226,7 @@ def dir_scan(scan_root)
 	real_scan_root = Pathname.new(scan_root).realpath
 
 	host_name = Socket.gethostname
-	timestamp = 3 # Time.now.to_i
+	timestamp = Time.now.to_i
 	index_path = File.join real_scan_root, ".dirscan_#{timestamp}"
 
 	puts "Host name: #{host_name}"
