@@ -6,41 +6,10 @@ require 'json'
 require 'yaml'
 require 'BinData'
 require 'etc'
-require 'digest'
 
-require File.join(File.dirname(__FILE__), 'hasher')
-
-HASH_SRC_SPLIT = '+'
-HASH_SRC_JOIN = '+'
+require File.join(File.dirname(__FILE__), 'lib', 'hasher')
 
 
-def hash_src_humanize(hash_src)
-	hash_src.gsub('+', ' + ')
-end
-
-def string_sha256(string)
-	begin
-		Digest::SHA256.hexdigest(string)
-	rescue
-		''
-	end
-end
-
-def file_md5(file_path)
-	begin
-		Digest::MD5.file(file_path).hexdigest
-	rescue
-		''
-	end
-end
-
-def file_sha256(file_path)
-	begin
-		Digest::SHA256.file(file_path).hexdigest
-	rescue
-		''
-	end
-end
 
 def file_mode(file)
 	begin
@@ -112,21 +81,6 @@ def read_object(file)
 	object = JSON.parse(string)
 	return object
 end
-
-# replaces each <entry> found in the hash_template with it's corresponding value from the info hash
-def create_hash(template, info)
-	# puts "DEBUG template: #{template}"
-	# puts "DEBUG info: #{info.to_json}"
-	keys = template.split(HASH_SRC_SPLIT)
-	# puts "DEBUG keys: #{keys}"
-	values = keys.map{|k| info[k]}
-	hash_src = values.join(HASH_SRC_JOIN)
-	# puts "DEBUG hash_src: #{hash_src_humanize(hash_src)}"
-	hash = string_sha256(hash_src)
-	# puts "DEBUG hash: #{hash}"
-	return hash
-end
-
 
 # scan a directory and all it's sub-directories (recursively)
 #
@@ -225,8 +179,8 @@ def scan_recursive(index_file, scan_info, dir_path)
 			  	# 'atime' => file_atime(full_path),
 			  	'owner' => file_owner(full_path),
 			  	'group' => file_group(full_path),
-			  	'md5' => file_md5(full_path),
-			  	'sha256' => file_sha256(full_path),
+			  	'md5' => FileHash.md5(full_path),
+			  	'sha256' => FileHash.sha256(full_path),
 			  }
 			  file_info['hash'] = Hasher.new(scan_info['file_hash_template'], file_info).hash
 
@@ -296,14 +250,14 @@ def scan_recursive(index_file, scan_info, dir_path)
 	# finalize the hashes
 	content_hash_src = content_hashes.join(HASH_SRC_JOIN)
 	meta_hash_src = meta_hashes.join(HASH_SRC_JOIN)
-	content_hash = string_sha256(content_hash_src)
-	meta_hash = string_sha256(meta_hash_src)
+	content_hash = StringHash.md5(content_hash_src)
+	meta_hash = StringHash.md5(meta_hash_src)
 
 	# finalize the recursive hashes (from their source strings)
 	recursive['content_hash_src'] = recursive['content_hashes'].join(HASH_SRC_JOIN)
 	recursive['meta_hash_src'] = recursive['meta_hashes'].join(HASH_SRC_JOIN)
-	recursive['content_hash'] = string_sha256(recursive['content_hash_src'])
-	recursive['meta_hash'] = string_sha256(recursive['meta_hash_src'])
+	recursive['content_hash'] = StringHash.md5(recursive['content_hash_src'])
+	recursive['meta_hash'] = StringHash.md5(recursive['meta_hash_src'])
 
   # write final dir record
   dir_info_final = dir_info_initial.merge({
@@ -400,8 +354,8 @@ def scan_verify(index_path)
 					puts "   OK: file '#{full_path}' exists"
 					size = File.size(full_path)
 					report(:size, size, file['size'])
-					report(:md5, file_md5(full_path), file['md5'])
-					report(:sha256, file_sha256(full_path), file['sha256'])
+					report(:md5, FileHash.md5(full_path), file['md5'])
+					report(:sha256, FileHash.sha256(full_path), file['sha256'])
 				else
 					puts "ERROR: file '#{full_path}' not found"
 				end

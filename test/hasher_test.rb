@@ -1,10 +1,14 @@
 # unit_tests.rb
+#
+# http://en.wikibooks.org/wiki/Ruby_Programming/Unit_testing
+#
 require "test/unit"
+require 'redgreen'
 
 #include the classes we are testing
-require File.join(File.dirname(__FILE__), 'dirscan.rb')
+require File.expand_path('../lib/hasher.rb', File.dirname(__FILE__))
 
-class TestDirScan < Test::Unit::TestCase
+class TestHasher < Test::Unit::TestCase
 
 	def test_hasher_blank
 		h = Hasher.new('', {})
