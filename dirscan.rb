@@ -8,8 +8,11 @@ require 'BinData'
 require 'etc'
 require 'digest'
 
+require File.join(File.dirname(__FILE__), 'hasher')
+
 HASH_SRC_SPLIT = '+'
 HASH_SRC_JOIN = '+'
+
 
 def hash_src_humanize(hash_src)
 	hash_src.gsub('+', ' + ')
@@ -196,11 +199,10 @@ def scan_recursive(index_file, scan_info, dir_path)
 			  	'owner' => file_owner(full_path),
 			  	'group' => file_group(full_path),
 			  }
-			  symlink_info['hash'] = create_hash(scan_info['symlink_hash_template'], symlink_info)
+			  symlink_info['hash'] = Hasher.new(scan_info['symlink_hash_template'], symlink_info).hash
 
 			  # accumulate
 		    content_size += size
-		    # meta_hash_src += symlink_info['hash']
 		    meta_hashes << symlink_info['hash']
 		    # content_hash does not exist for symlinks
 
@@ -211,7 +213,6 @@ def scan_recursive(index_file, scan_info, dir_path)
 			elsif File.exist?(full_path)
 				files << name
 
-				# get this size of the file
 		    size = File.size(full_path)
 
 		    file_info = {
@@ -227,12 +228,10 @@ def scan_recursive(index_file, scan_info, dir_path)
 			  	'md5' => file_md5(full_path),
 			  	'sha256' => file_sha256(full_path),
 			  }
-			  file_info['hash'] = create_hash(scan_info['file_hash_template'], file_info)
+			  file_info['hash'] = Hasher.new(scan_info['file_hash_template'], file_info).hash
 
 			  # accumulate
 		    content_size += size
-		    # content_hash_src += file_info['sha256']
-		    # meta_hash_src += file_info['hash']
 		    content_hashes << file_info['sha256']
 		    meta_hashes << file_info['hash']
 
@@ -257,10 +256,8 @@ def scan_recursive(index_file, scan_info, dir_path)
 		'dir_count' => dirs.count,
 		'file_count' => files.count,
 		'max_depth' => 0, # 0 means empty dir, 1 means the dir only contains files or symlinks, > 1 indicates subdirs
-		# 'content_hash_src' => '',
-		# 'meta_hash_src' => '',
-		'content_hashes' => [],
-		'meta_hashes' => [],
+		'content_hashes' => content_hashes.dup,		# clone array, so 'recursive' can keep adding to it's copy
+		'meta_hashes' => meta_hashes.dup,					# clone array, so 'recursive' can keep adding to it's copy
 	}
 
 
@@ -274,7 +271,6 @@ def scan_recursive(index_file, scan_info, dir_path)
 	    #
 
 	  	# accumulate folder meta-data
-	    # meta_hash_src += sub_dir_info['hash']
 	    meta_hashes << sub_dir_info['hash']
 	    # content_hash does not make sense for a dir at this level (since we don't recurse, it's effecively empty)
 
@@ -290,8 +286,6 @@ def scan_recursive(index_file, scan_info, dir_path)
 	  	recursive['max_depth'] = [recursive['max_depth'], 1 + sub_dir_info['recursive']['max_depth']].max
 	  	
 	  	# accumulate hash source strings
-	    # recursive['content_hash_src'] += sub_dir_info['recursive']['content_hash']
-	    # recursive['meta_hash_src'] += sub_dir_info['recursive']['meta_hash']
 	    recursive['content_hashes'] << sub_dir_info['recursive']['content_hash']
 	    recursive['meta_hashes'] << sub_dir_info['recursive']['meta_hash']
 	  end
@@ -325,7 +319,7 @@ def scan_recursive(index_file, scan_info, dir_path)
 		# recursive summary
 		'recursive' => recursive,
 	})
- 	dir_info_final['hash'] = create_hash(scan_info['dir_hash_template'], dir_info_final)
+ 	dir_info_final['hash'] = Hasher.new(scan_info['dir_hash_template'], dir_info_final).hash
   write_object(index_file, dir_info_final)
 
   # return the summary of all the entries in the folder (including recursive summary)
@@ -452,18 +446,5 @@ when 'u'
 	index_path = ARGV[1]
 	text_path = ARGV[2]
 	index_unpack(index_path, text_path)
-when 't'
-	info = {
-		'a' => 'A',
-		'b' => 'BB',
-		'c' => 'CCC',
-	}
-	puts "info: #{info.to_json}"
-	hash_template = 'a+b+c'
-	puts "hash_templage: #{hash_template}"
-	hash = create_hash(hash_template, info)
-	puts "hash: #{hash}"
 end
-
-
 
