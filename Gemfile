@@ -1,3 +1,6 @@
+gem 'json'
+gem 'bindata'
+
 group :development do
   # file-system notifications
   gem 'rb-inotify', :require => false

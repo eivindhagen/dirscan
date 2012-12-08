@@ -9,26 +9,8 @@ require 'etc'
 
 require File.join(File.dirname(__FILE__), 'lib', 'hasher')
 require File.join(File.dirname(__FILE__), 'lib', 'pathinfo')
+require File.join(File.dirname(__FILE__), 'lib', 'indexfile')
 
-
-def write_object(file, object)
-	# file.write object.to_json + "\n\n"
-	string = object.to_json
-	length = string.size
-	# puts "length: #{length}"
-	# puts "string: #{string}"
-	BinData::Int32be.new(length).write(file)
-	file.write string
-end
-
-def read_object(file)
-	length = BinData::Int32be.new.read(file)
-	# puts "length: #{length}"
-	string = file.read(length)
-	# puts "string: #{string}"
-	object = JSON.parse(string)
-	return object
-end
 
 # scan a directory and all it's sub-directories (recursively)
 #
@@ -67,7 +49,7 @@ def scan_recursive(index_file, scan_info, dir_path)
   	'group' => pathinfo.group,
   }
 
-  write_object(index_file, dir_info_initial)
+  index_file.write_object(dir_info_initial)
 
   symlinks = []
   dirs = []
@@ -109,7 +91,7 @@ def scan_recursive(index_file, scan_info, dir_path)
 		    meta_hashes << symlink_info['hash']
 		    # content_hash does not exist for symlinks
 
-			  write_object(index_file, symlink_info)
+			  index_file.write_object(symlink_info)
 	    elsif Dir.exist?(full_path)
 	    	# recurse into sub dirs after completing this dir scan, tally things up at the end...
 			  dirs << name
@@ -137,13 +119,13 @@ def scan_recursive(index_file, scan_info, dir_path)
 		    content_hashes << file_info['sha256']
 		    meta_hashes << file_info['hash']
 
-			  write_object(index_file, file_info)
+			  index_file.write_object(file_info)
 			else
 				unknown_info = {
 			  	'type' => 'unknown',
 			  	'name' => name
 			  }
-			  write_object(index_file, unknown_info)
+			  index_file.write_object(unknown_info)
 			end
 		end
   end
@@ -222,7 +204,7 @@ def scan_recursive(index_file, scan_info, dir_path)
 		'recursive' => recursive,
 	})
  	dir_info_final['hash'] = Hasher.new(scan_info['dir_hash_template'], dir_info_final).hash
-  write_object(index_file, dir_info_final)
+  index_file.write_object(dir_info_final)
 
   # return the summary of all the entries in the folder (including recursive summary)
   return dir_info_final
@@ -253,9 +235,9 @@ def dir_scan(scan_root, index_path)
 		}
 
 	# create the index file
-	File.open(index_path, 'wb') do |index_file|
+	IndexFile::Writer.new(index_path) do |index_file|
 		# write dirscan meta-data
-		write_object(index_file, scan_info)
+		index_file.write_object(scan_info)
 
 		# scan recursively
 		scan = scan_recursive(index_file, scan_info, real_scan_root)
@@ -277,14 +259,14 @@ end
 
 def scan_verify(index_path)
 	# read the index file
-	File.open(index_path, 'rb') do |index_file|
+	IndexFile::Reader.new(index_path) do |index_file|
 		# state objects, updated during parsing
 		dirscan = {}
 		dir = {}
 
 		object_count = 0
-		while not index_file.eof? do
-			object = read_object(index_file)
+		while not input_file.eof? do
+			object = index_file.read_object
 			object_count += 1
 			
 			case object['type']
@@ -315,13 +297,13 @@ def scan_verify(index_path)
 end
 
 def index_unpack(index_path, text_path)
-	# write the text file
-	File.open(text_path, 'w') do |text_file|
-		# read the index file
-		File.open(index_path, 'rb') do |index_file|
+	# read the index file
+	IndexFile::Reader.new(index_path) do |index_file|
+		# write the text file
+		File.open(text_path, 'w') do |text_file|
 			object_count = 0
 			while not index_file.eof? do
-				object = read_object(index_file)
+				object = index_file.read_object
 				text_file.write JSON.pretty_generate(object) + "\n"
 				object_count += 1
 				# puts 'object: ' + object.to_yaml
