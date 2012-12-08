@@ -16,9 +16,9 @@ class TestPathInfo < Test::Unit::TestCase
     assert_equal('eivindhagen', pathinfo.owner )
     assert_equal('staff', pathinfo.group )
     assert_equal(3, pathinfo.size )
-    assert_equal(1354779455, pathinfo.create_time )	# this test is volatile, the file's create time will change if the file is deleted/restored
-    assert_equal(1354955047, pathinfo.modify_time )	# this test is volatile, the file's modify tile will change if the file is edited
-    # assert_equal(1354955816, pathinfo.access_time )	# this test is volatile, because the file's access time changes when it's read
+    assert_equal(1354956010, pathinfo.create_time )	# this test is volatile, the file's create time will change if the file is deleted/restored
+    assert_equal(1354956047, pathinfo.modify_time )	# this test is volatile, the file's modify tile will change if the file is edited
+    # assert_equal(1354956078, pathinfo.access_time )	# this test is volatile, because the file's access time changes when it's read
 	end
 	 
 end
