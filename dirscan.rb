@@ -8,59 +8,7 @@ require 'BinData'
 require 'etc'
 
 require File.join(File.dirname(__FILE__), 'lib', 'hasher')
-
-
-
-def file_mode(file)
-	begin
-		mode_integer = File.lstat(file).mode & 0777
-		mode_octal_string = mode_integer.to_s(8)
-	rescue
-		''
-	end
-end
-
-def file_ctime(file)
-	begin
-		File.ctime(file).to_i
-	rescue
-		0
-	end
-end
-
-def file_mtime(file)
-	begin
-		File.mtime(file).to_i
-	rescue
-		0
-	end
-end
-
-# def file_atime(file)
-# 	begin
-# 		File.atime(file).to_i
-# 	rescue
-# 		0
-# 	end
-# end
-
-def file_owner(file)
-	begin
-		uid = File.stat(file).uid
-		owner_name = Etc.getpwuid(uid).name
-	rescue
-		'unknown'
-	end
-end
-
-def file_group(file)
-	begin
-		gid = File.stat(file).gid
-		group_name = Etc.getgrgid(gid).name
-	rescue
-		'unknown'
-	end
-end
+require File.join(File.dirname(__FILE__), 'lib', 'pathinfo')
 
 
 def write_object(file, object)
@@ -105,17 +53,18 @@ end
 def scan_recursive(index_file, scan_info, dir_path)
   base_path = Pathname.new(dir_path)
 
+  pathinfo = PathInfo.new(dir_path)
+
   # write initial dir record
   dir_info_initial = {
   	'type' => 'dir',
   	'dir_path' => dir_path,
   	'name' => File.basename(dir_path),
-  	'mode' => file_mode(dir_path),
-  	'ctime' => file_ctime(dir_path),
-  	'mtime' => file_mtime(dir_path),
-  	# 'atime' => file_atime(dir_path),
-  	'owner' => file_owner(dir_path),
-  	'group' => file_group(dir_path),
+  	'mode' => pathinfo.mode,
+  	'ctime' => pathinfo.create_time,
+  	'mtime' => pathinfo.modify_time,
+  	'owner' => pathinfo.owner,
+  	'group' => pathinfo.group,
   }
 
   write_object(index_file, dir_info_initial)
@@ -130,6 +79,7 @@ def scan_recursive(index_file, scan_info, dir_path)
 	meta_hashes = []
 
   Dir[File.join(base_path, '{*,.*}')].each do |full_path|
+  	pathinfo = PathInfo.new(full_path)
     name = Pathname.new(full_path).relative_path_from(base_path).to_s # .to_s converts from Pathname to actual string
     case name
     when '.'	# current dir
@@ -146,12 +96,11 @@ def scan_recursive(index_file, scan_info, dir_path)
 			  	'name' => name,
 			  	'link_path' => File.readlink(full_path),
 			  	'size' => size,
-			  	'mode' => file_mode(full_path),
-			  	'ctime' => file_ctime(full_path),
-			  	'mtime' => file_mtime(full_path),
-			  	# 'atime' => file_atime(full_path),
-			  	'owner' => file_owner(full_path),
-			  	'group' => file_group(full_path),
+			  	'mode' => pathinfo.mode,
+			  	'ctime' => pathinfo.create_time,
+			  	'mtime' => pathinfo.modify_time,
+			  	'owner' => pathinfo.owner,
+			  	'group' => pathinfo.group,
 			  }
 			  symlink_info['hash'] = Hasher.new(scan_info['symlink_hash_template'], symlink_info).hash
 
@@ -173,12 +122,11 @@ def scan_recursive(index_file, scan_info, dir_path)
 			  	'type' => 'file',
 			  	'name' => name,
 			  	'size' => size,
-			  	'mode' => file_mode(full_path),
-			  	'ctime' => file_ctime(full_path),
-			  	'mtime' => file_mtime(full_path),
-			  	# 'atime' => file_atime(full_path),
-			  	'owner' => file_owner(full_path),
-			  	'group' => file_group(full_path),
+			  	'mode' => pathinfo.mode,
+			  	'ctime' => pathinfo.create_time,
+			  	'mtime' => pathinfo.modify_time,
+			  	'owner' => pathinfo.owner,
+			  	'group' => pathinfo.group,
 			  	'md5' => FileHash.md5(full_path),
 			  	'sha256' => FileHash.sha256(full_path),
 			  }
