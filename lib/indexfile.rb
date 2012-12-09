@@ -1,6 +1,8 @@
 require 'json'
 require 'bindata'
 
+require File.join(File.dirname(__FILE__), 'symbolize_keys')
+
 class IndexFile
 
 	class Reader
@@ -15,6 +17,8 @@ class IndexFile
 			length = BinData::Int32be.new.read(@file)
 			string = @file.read(length)
 			object = JSON.parse(string)
+			object.symbolize_keys
+			object[:recursive].symbolize_keys if object[:recursive]
 			return object
 		end
 

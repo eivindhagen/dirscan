@@ -25,8 +25,9 @@ end
 
 class Hasher
 	# replaces each <entry> found in the hash_template with it's corresponding value from the info hash
+	# NOTE: the info hash keys should be symbols (NOT string).
 	def initialize(template, info)
-		keys = template.split(HASH_SRC_SPLIT)
+		keys = template.split(HASH_SRC_SPLIT).map{|key_string| key_string.to_sym}
 		values = keys.map{|k| info[k]}
 		@source = values.join(HASH_SRC_JOIN)
 		@hash = StringHash.sha256(source)

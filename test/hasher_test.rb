@@ -19,7 +19,7 @@ class TestHasher < Test::Unit::TestCase
 	end
 	
 	def test_hasher_nohash
-		h = Hasher.new('k', {'l' => 'lost'})	# info hash does not have the key 'k'
+		h = Hasher.new('k', {:l => 'lost'})	# info hash does not have the key 'k'
     assert_equal('', h.source )
 
     verified_result = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'	# echo -ne '' | shasum -a 256
@@ -28,7 +28,7 @@ class TestHasher < Test::Unit::TestCase
 	
 	def test_hasher_x
 		info = {
-			'x' => 'cross',
+			:x => 'cross',
 		}
 		template = 'x'
 		h = Hasher.new(template, info)
@@ -41,9 +41,9 @@ class TestHasher < Test::Unit::TestCase
 	def test_hasher_abc
 
 		info = {
-			'a' => 'A',
-			'b' => 'BB',
-			'c' => 'CCC',
+			:a => 'A',
+			:b => 'BB',
+			:c => 'CCC',
 		}
 		template = 'a+b+c'
 		h = Hasher.new(template, info)
