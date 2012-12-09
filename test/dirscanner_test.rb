@@ -57,6 +57,8 @@ class TestDirScanner < Test::Unit::TestCase
   		assert_equal('7f8e1ec1c655fa111d605cc3e1860eb96750c99c1ffe683309cd5f63f0446912', dir[:meta_hash_src])
   		assert_equal('fbe996f69a7152d7b955498723219f35', dir[:content_hash])
   		assert_equal('2aefc9464c941f82827ee0f304ef8162', dir[:meta_hash])
+			assert_equal("one_file+755+eivindhagen+staff+1354779288+1354956010+3+fbe996f69a7152d7b955498723219f35+2aefc9464c941f82827ee0f304ef8162", dir[:hash_src])
+  		assert_equal("3fe193f2d86f0aa4e909c5f8019f0b80d0253a245f905603a37bc4d49de37d12", dir[:hash])
 
   		# recursive
     	assert_equal(3, dir[:recursive][:content_size])
@@ -84,7 +86,8 @@ class TestDirScanner < Test::Unit::TestCase
 			assert_equal('staff', file[:group])
 			assert_equal('f97c5d29941bfb1b2fdab0874906ab82', file[:md5])
 			assert_equal('7692c3ad3540bb803c020b3aee66cd8887123234ea0c6e7143c0add73ff431ed', file[:sha256])
-			assert_equal('7f8e1ec1c655fa111d605cc3e1860eb96750c99c1ffe683309cd5f63f0446912', file[:hash])
+  		assert_equal("file1.txt+644+eivindhagen+staff+1354956010+1354956047+3+7692c3ad3540bb803c020b3aee66cd8887123234ea0c6e7143c0add73ff431ed", file[:hash_src])
+  		assert_equal("7f8e1ec1c655fa111d605cc3e1860eb96750c99c1ffe683309cd5f63f0446912", file[:hash])
 		end
 
 		# verify the scan, there should be 0 issues
