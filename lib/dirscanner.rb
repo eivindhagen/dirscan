@@ -15,6 +15,7 @@ class DirScanner
 		@scan_root = options[:scan_root]		# required for scan()
 		@index_path = options[:index_path]	# required for verify() & unpack(). scan() will create index_path if not provided
 		@timestamp = options[:timestamp]		# optional, will be set to current time if not provided
+		@quick_scan = options[:quick_scan]	# optional, will skip checksum and hash calculations for a faster scan
 	end
 
 	# perform a directory scan, by inspecting all files, symlinks and folders (recursively)
@@ -31,18 +32,25 @@ class DirScanner
 		
 		# create scan object, contains meta-data for the entire scan
 		@scan_info = {
-				:type => :dirscan,
-				:host_name => host_name,
-				:scan_root => @scan_root,
-				:scan_root_real => Pathname.new(@scan_root).realpath,	# turn scan_root into the canonical form, making it absolute, with no symlinks
-				:timestamp => timestamp,
-				:index_path => index_path,
+			:type => :dirscan,
+			:host_name => host_name,
+			:scan_root => @scan_root,
+			:scan_root_real => Pathname.new(@scan_root).realpath,	# turn scan_root into the canonical form, making it absolute, with no symlinks
+			:timestamp => timestamp,
+			:index_path => index_path,
+		}
 
-				# these templates specify how to create the hash source strings for various dir entry types
-				:symlink_hash_template => 'name+mode+owner+group+ctime+mtime+size'.freeze,	# size of symlink itself, not the target
-				:file_hash_template 		=> 'name+mode+owner+group+ctime+mtime+size+sha256'.freeze,	# size and content hash
-				:dir_hash_template 		=> 'name+mode+owner+group+ctime+mtime+content_size+content_hash+meta_hash'.freeze,	# size/hash of dir's content
-			}
+		# templates specify how to create the hash source strings for various dir entry types
+		if @quick_scan
+			# quick scan does not need hash templates
+			@scan_info[:quick] = true
+		else
+			@scan_info.merge!({
+				:symlink_hash_template	=> 'name+mode+owner+group+ctime+mtime+size'.freeze,	# size of symlink itself, not the target
+				:file_hash_template			=> 'name+mode+owner+group+ctime+mtime+size+sha256'.freeze,	# size and content hash
+				:dir_hash_template			=> 'name+mode+owner+group+ctime+mtime+content_size+content_hash+meta_hash'.freeze,	# size/hash of dir's content
+			})
+		end
 
 		# create the index file, and perform the scan
 		IndexFile::Writer.new(@index_path) do |index_file|
@@ -218,8 +226,6 @@ class DirScanner
 	  dirs = []
 	  files = []
 		content_size = 0
-		# content_hash_src = ''
-		# meta_hash_src = ''
 		content_hashes = []
 		meta_hashes = []
 
@@ -235,27 +241,29 @@ class DirScanner
 					symlinks << name
 
 					# get the sie of the symlink itself (not the size of what it's pointing at)
-			    size = File.lstat(full_path).size
+			    # size = File.lstat(full_path).size
+			    # DO NOT NEED THIS since a symlink does not count as real content (a folder is not real content either, only files are)
+
 					symlink_info = {
 				  	:type => :symlink,
 				  	:name => name,
 				  	:link_path => File.readlink(full_path),
-				  	:size => size,
 				  	:mode => pathinfo.mode,
 				  	:ctime => pathinfo.create_time,
 				  	:mtime => pathinfo.modify_time,
 				  	:owner => pathinfo.owner,
 				  	:group => pathinfo.group,
 				  }
-				  hasher = Hasher.new(scan_info[:symlink_hash_template], symlink_info)
-				  symlink_info[:hash_src] = hasher.source
-				  symlink_info[:hash] = hasher.hash
+				  unless scan_info[:quick]
+					  hasher = Hasher.new(scan_info[:symlink_hash_template], symlink_info)
+					  symlink_info[:hash_src] = hasher.source
+					  symlink_info[:hash] = hasher.hash
 
-				  # accumulate
-			    content_size += size
-			    meta_hashes << symlink_info[:hash]
-			    # content_hash does not exist for symlinks
-
+					  # accumulate
+				    meta_hashes << symlink_info[:hash]
+				    # content_hash does not exist for symlinks
+					end
+	
 				  index_file.write_object(symlink_info)
 		    elsif Dir.exist?(full_path)
 		    	# recurse into sub dirs after completing this dir scan, tally things up at the end...
@@ -264,6 +272,7 @@ class DirScanner
 					files << name
 
 			    size = File.size(full_path)
+			    content_size += size
 
 			    file_info = {
 				  	:type => :file,
@@ -274,17 +283,20 @@ class DirScanner
 				  	:mtime => pathinfo.modify_time,
 				  	:owner => pathinfo.owner,
 				  	:group => pathinfo.group,
-				  	:md5 => FileHash.md5(full_path),
-				  	:sha256 => FileHash.sha256(full_path),
+				  	
+				  	
 				  }
-				  hasher = Hasher.new(scan_info[:file_hash_template], file_info)
-				  file_info[:hash_src] = hasher.source
-				  file_info[:hash] = hasher.hash
+				  unless scan_info[:quick]
+				  	file_info[:md5] = FileHash.md5(full_path)
+				  	file_info[:sha256] = FileHash.sha256(full_path)
 
-				  # accumulate
-			    content_size += size
-			    content_hashes << file_info[:sha256]
-			    meta_hashes << file_info[:hash]
+					  hasher = Hasher.new(scan_info[:file_hash_template], file_info)
+					  file_info[:hash_src] = hasher.source
+					  file_info[:hash] = hasher.hash
+					  # accumulate
+				    content_hashes << file_info[:sha256]
+				    meta_hashes << file_info[:hash]
+					end
 
 				  index_file.write_object(file_info)
 				else
@@ -307,10 +319,13 @@ class DirScanner
 			:dir_count => dirs.count,
 			:file_count => files.count,
 			:max_depth => 0, # 0 means empty dir, 1 means the dir only contains files or symlinks, > 1 indicates subdirs
-			:content_hashes => content_hashes.dup,		# clone array, so 'recursive' can keep adding to it's copy
-			:meta_hashes => meta_hashes.dup,					# clone array, so 'recursive' can keep adding to it's copy
 		}
-
+		unless scan_info[:quick]
+			recursive.merge!({
+				:content_hashes => content_hashes.dup,		# clone array, so 'recursive' can keep adding to it's copy
+				:meta_hashes => meta_hashes.dup,					# clone array, so 'recursive' can keep adding to it's copy
+			})
+		end
 
 	  if dirs.count > 0
 		  dirs.each do |dir|
@@ -337,8 +352,10 @@ class DirScanner
 		  	recursive[:max_depth] = [recursive[:max_depth], 1 + sub_dir_info[:recursive][:max_depth]].max
 		  	
 		  	# accumulate hash source strings
-		    recursive[:content_hashes] << sub_dir_info[:recursive][:content_hash]
-		    recursive[:meta_hashes] << sub_dir_info[:recursive][:meta_hash]
+		  	unless scan_info[:quick]
+			    recursive[:content_hashes] << sub_dir_info[:recursive][:content_hash]
+			    recursive[:meta_hashes] << sub_dir_info[:recursive][:meta_hash]
+			  end
 		  end
 		else
 			max_depth = 1 if files.count > 0 || symlinks.count > 0
@@ -350,11 +367,13 @@ class DirScanner
 		content_hash = StringHash.md5(content_hash_src)
 		meta_hash = StringHash.md5(meta_hash_src)
 
-		# finalize the recursive hashes (from their source strings)
-		recursive[:content_hash_src] = recursive[:content_hashes].join(HASH_SRC_JOIN)
-		recursive[:meta_hash_src] = recursive[:meta_hashes].join(HASH_SRC_JOIN)
-		recursive[:content_hash] = StringHash.md5(recursive[:content_hash_src])
-		recursive[:meta_hash] = StringHash.md5(recursive[:meta_hash_src])
+		unless scan_info[:quick]
+			# finalize the recursive hashes (from their source strings)
+			recursive[:content_hash_src] = recursive[:content_hashes].join(HASH_SRC_JOIN)
+			recursive[:meta_hash_src] = recursive[:meta_hashes].join(HASH_SRC_JOIN)
+			recursive[:content_hash] = StringHash.md5(recursive[:content_hash_src])
+			recursive[:meta_hash] = StringHash.md5(recursive[:meta_hash_src])
+		end
 
 	  # write final dir record
 	  dir_info_final = dir_info_initial.merge({
@@ -362,17 +381,21 @@ class DirScanner
 			:dir_count => dirs.count,
 			:file_count => files.count,
 			:content_size => content_size,
-			# hashes
-			:content_hash_src => content_hash_src,
-			:meta_hash_src => meta_hash_src,
-			:content_hash => content_hash,
-			:meta_hash => meta_hash,
 			# recursive summary
 			:recursive => recursive,
 		})
-	  hasher = Hasher.new(scan_info[:dir_hash_template], dir_info_final)
-	  dir_info_final[:hash_src] = hasher.source
-	  dir_info_final[:hash] = hasher.hash
+		unless scan_info[:quick]
+			dir_info_final.merge!({
+				# hashes
+				:content_hash_src => content_hash_src,
+				:meta_hash_src => meta_hash_src,
+				:content_hash => content_hash,
+				:meta_hash => meta_hash,
+			})
+		  hasher = Hasher.new(scan_info[:dir_hash_template], dir_info_final)
+		  dir_info_final[:hash_src] = hasher.source
+		  dir_info_final[:hash] = hasher.hash
+		end
 
 	  index_file.write_object(dir_info_final)
 

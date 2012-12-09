@@ -16,6 +16,18 @@ when 's'
 	)
 	ds.scan
 
+when 'sq'
+	# scan dir quickly, creates an index file
+	scan_root = ARGV[1]
+	index_path = ARGV[2]
+
+	ds = DirScanner.new(
+		:scan_root => scan_root,
+		:index_path => index_path,
+		:quick_scan => true,
+	)
+	ds.scan
+
 when 'v'
 	# verify index file, compares with original dir
 	index_path = ARGV[1]
