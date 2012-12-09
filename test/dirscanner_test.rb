@@ -20,31 +20,31 @@ class TestDirScanner < Test::Unit::TestCase
 	def test_onefile
 		# scan
 		ds = DirScanner.new(
-			:scan_root => File.join(File.dirname(__FILE__), '../test_data/one_file'),
-			:index_path => File.join(File.dirname(__FILE__), '../tmp/one_file.dirscan'),
+			:scan_root => 'test_data/one_file',
+			:index_path => 'tmp/one_file.dirscan',
 		)
 		scan_result = ds.scan
 
 		# unpack the scan
 		du = DirScanner.new(
-			:index_path => File.join(File.dirname(__FILE__), '../tmp/one_file.dirscan'),
+			:index_path => 'tmp/one_file.dirscan',
 		)
-		unpack_path = File.join(File.dirname(__FILE__), '../tmp/one_file.json')
+		unpack_path = 'tmp/one_file.json'
 		unpack_result = ds.unpack(unpack_path)
 
 		# extract the scan, verify attributes
 		de = DirScanner.new(
-			:index_path => File.join(File.dirname(__FILE__), '../tmp/one_file.dirscan'),
+			:index_path => 'tmp/one_file.dirscan',
 		)
 		extract_result = ds.extract
 		puts "extract_result: #{extract_result.inspect}"
-		dir = extract_result[:dirs]["/Users/eivindhagen/Personal/dirscan/test_data/one_file"]
+		dir = extract_result[:dirs]["test_data/one_file"]
 		assert_not_nil(dir, "directory 'one_file' should be in the extract result")
 		if dir
 			assert_equal('dir', dir[:type])
 			assert_equal('one_file', dir[:name])
 			assert_equal('755', dir[:mode])
-			assert_equal(0, dir[:ctime])
+			assert_equal(1354779288, dir[:ctime])
 			assert_equal(1354956010, dir[:mtime])
 			assert_equal('eivindhagen', dir[:owner])
 			assert_equal('staff', dir[:group])
@@ -89,7 +89,7 @@ class TestDirScanner < Test::Unit::TestCase
 
 		# verify the scan, there should be 0 issues
 		dv = DirScanner.new(
-			:index_path => File.join(File.dirname(__FILE__), '../tmp/one_file.dirscan'),
+			:index_path => 'tmp/one_file.dirscan',
 		)
 		verify_result = ds.verify
 		assert_equal(0, verify_result[:issues_count])

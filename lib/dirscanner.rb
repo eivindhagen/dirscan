@@ -23,9 +23,6 @@ class DirScanner
 		throw ":scan_root is not set" unless @scan_root
 
 		@timestamp = Time.now.to_i unless @timestamp
-
-		# turn scan_root into the canonical form, making it absolute, with no symlinks
-		real_scan_root = Pathname.new(@scan_root).realpath
 		
 		# index file will be inside the scan_root foler, unless otherwise specified
 		@index_path = File.join(real_scan_root, ".dirscan_#{timestamp}") unless @index_path
@@ -36,7 +33,8 @@ class DirScanner
 		@scan_info = {
 				:type => :dirscan,
 				:host_name => host_name,
-				:scan_root => real_scan_root,
+				:scan_root => @scan_root,
+				:scan_root_real => Pathname.new(@scan_root).realpath,	# turn scan_root into the canonical form, making it absolute, with no symlinks
 				:timestamp => timestamp,
 				:index_path => index_path,
 
@@ -52,7 +50,7 @@ class DirScanner
 			index_file.write_object(scan_info)
 
 			# scan recursively
-			@scan_result = scan_recursive(index_file, @scan_info, real_scan_root)
+			@scan_result = scan_recursive(index_file, @scan_info, @scan_root)
 		end
 
 		return @scan_result
