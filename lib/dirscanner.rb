@@ -82,7 +82,7 @@ class DirScanner
 					symlink = object
 				when :file
 					file = object
-					full_path = File.join dir[:dir_path], file[:name]
+					full_path = File.join dir[:path], file[:name]
 					if File.exist?(full_path)
 						size = File.size(full_path)
 						identical = true
@@ -130,17 +130,17 @@ class DirScanner
 				when :dir
 					dir = object
 					# store in result, or merge it if an initial record already exist
-					dir_path = dir[:dir_path]
-					if result[:dirs][dir_path]
-						result[:dirs][dir_path].merge! dir
+					path = dir[:path]
+					if result[:dirs][path]
+						result[:dirs][path].merge! dir
 					else
-						result[:dirs][dir_path] = dir
+						result[:dirs][path] = dir
 						# prep dir to hold child entries
 						dir[:entries] ||= {}
 					end
 
 					# set current dir
-					dir = result[:dirs][dir_path]
+					dir = result[:dirs][path]
 				when :symlink
 					symlink = object
 					# store in result, inside current dir
@@ -195,16 +195,16 @@ class DirScanner
 	#   dir-b (final)
 	#   dir-a (final)
 	#
-	def scan_recursive(index_file, scan_info, dir_path)
-	  base_path = Pathname.new(dir_path)
+	def scan_recursive(index_file, scan_info, path)
+	  base_path = Pathname.new(path)
 
-	  pathinfo = PathInfo.new(dir_path)
+	  pathinfo = PathInfo.new(path)
 
 	  # write initial dir record
 	  dir_info_initial = {
 	  	:type => :dir,
-	  	:dir_path => dir_path,
-	  	:name => File.basename(dir_path),
+	  	:path => path,
+	  	:name => File.basename(path),
 	  	:mode => pathinfo.mode,
 	  	:ctime => pathinfo.create_time,
 	  	:mtime => pathinfo.modify_time,
@@ -314,8 +314,8 @@ class DirScanner
 
 	  if dirs.count > 0
 		  dirs.each do |dir|
-		  	puts "Scanning subdir #{dir} of #{dir_path}"
-		  	sub_dir_info = scan_recursive(index_file, scan_info, File.join(dir_path, dir))
+		  	puts "Scanning subdir #{dir} of #{path}"
+		  	sub_dir_info = scan_recursive(index_file, scan_info, File.join(path, dir))
 
 		    #
 		    # accumulation (for current level onlY)
