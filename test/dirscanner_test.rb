@@ -44,7 +44,7 @@ class TestDirScanner < Test::Unit::TestCase
 			assert_equal('dir', dir[:type])
 			assert_equal('one_file', dir[:name])
 			assert_equal('755', dir[:mode])
-			assert_equal(1354779288, dir[:ctime])
+			# assert_equal(1354779288, dir[:ctime])
 			assert_equal(1354956010, dir[:mtime])
 			assert_equal('eivindhagen', dir[:owner])
 			assert_equal('staff', dir[:group])
@@ -54,11 +54,11 @@ class TestDirScanner < Test::Unit::TestCase
   		assert_equal(1, dir[:file_count])
   		assert_equal(3, dir[:content_size])
   		assert_equal('7692c3ad3540bb803c020b3aee66cd8887123234ea0c6e7143c0add73ff431ed', dir[:content_hash_src])
-  		assert_equal('7f8e1ec1c655fa111d605cc3e1860eb96750c99c1ffe683309cd5f63f0446912', dir[:meta_hash_src])
+  		assert_equal('b418a016651e8ebbe31b235b54c22a44256280a61a49e2b2f064e31ea7196db9', dir[:meta_hash_src])
   		assert_equal('fbe996f69a7152d7b955498723219f35', dir[:content_hash])
-  		assert_equal('2aefc9464c941f82827ee0f304ef8162', dir[:meta_hash])
-			assert_equal("one_file+755+eivindhagen+staff+1354779288+1354956010+3+fbe996f69a7152d7b955498723219f35+2aefc9464c941f82827ee0f304ef8162", dir[:hash_src])
-  		assert_equal("3fe193f2d86f0aa4e909c5f8019f0b80d0253a245f905603a37bc4d49de37d12", dir[:hash])
+  		assert_equal('afffb0bb824b01e5c371b2186da9bd8d', dir[:meta_hash])
+			assert_equal("one_file+755+eivindhagen+staff+1354956010+3+fbe996f69a7152d7b955498723219f35+afffb0bb824b01e5c371b2186da9bd8d", dir[:hash_src])
+  		assert_equal("b202f7e9283f39d54e57c4b9edf8e730666a0e84ecc84a0a6caefc1b7587a188", dir[:hash])
 
   		# recursive
     	assert_equal(3, dir[:recursive][:content_size])
@@ -67,11 +67,11 @@ class TestDirScanner < Test::Unit::TestCase
     	assert_equal(1, dir[:recursive][:file_count])
     	assert_equal(0, dir[:recursive][:max_depth])
     	assert_equal(["7692c3ad3540bb803c020b3aee66cd8887123234ea0c6e7143c0add73ff431ed"], dir[:recursive][:content_hashes])
-    	assert_equal(["7f8e1ec1c655fa111d605cc3e1860eb96750c99c1ffe683309cd5f63f0446912"], dir[:recursive][:meta_hashes])
+    	assert_equal(["b418a016651e8ebbe31b235b54c22a44256280a61a49e2b2f064e31ea7196db9"], dir[:recursive][:meta_hashes])
     	assert_equal("7692c3ad3540bb803c020b3aee66cd8887123234ea0c6e7143c0add73ff431ed", dir[:recursive][:content_hash_src])
-    	assert_equal("7f8e1ec1c655fa111d605cc3e1860eb96750c99c1ffe683309cd5f63f0446912", dir[:recursive][:meta_hash_src])
+    	assert_equal("b418a016651e8ebbe31b235b54c22a44256280a61a49e2b2f064e31ea7196db9", dir[:recursive][:meta_hash_src])
     	assert_equal("fbe996f69a7152d7b955498723219f35", dir[:recursive][:content_hash])
-    	assert_equal("2aefc9464c941f82827ee0f304ef8162", dir[:recursive][:meta_hash])
+    	assert_equal("afffb0bb824b01e5c371b2186da9bd8d", dir[:recursive][:meta_hash])
 		end
 		file = dir[:entries]['file1.txt']
 		assert_not_nil(file, "file 'file1.txt' should be in the extract result")
@@ -80,14 +80,14 @@ class TestDirScanner < Test::Unit::TestCase
 			assert_equal('file1.txt', file[:name])
 			assert_equal(3, file[:size])
 			assert_equal('644', file[:mode])
-			assert_equal(1354956010, file[:ctime])
+			# assert_equal(1354956010, file[:ctime])
 			assert_equal(1354956047, file[:mtime])
 			assert_equal('eivindhagen', file[:owner])
 			assert_equal('staff', file[:group])
 			assert_equal('f97c5d29941bfb1b2fdab0874906ab82', file[:md5])
 			assert_equal('7692c3ad3540bb803c020b3aee66cd8887123234ea0c6e7143c0add73ff431ed', file[:sha256])
-  		assert_equal("file1.txt+644+eivindhagen+staff+1354956010+1354956047+3+7692c3ad3540bb803c020b3aee66cd8887123234ea0c6e7143c0add73ff431ed", file[:hash_src])
-  		assert_equal("7f8e1ec1c655fa111d605cc3e1860eb96750c99c1ffe683309cd5f63f0446912", file[:hash])
+  		assert_equal("file1.txt+644+eivindhagen+staff+1354956047+3+7692c3ad3540bb803c020b3aee66cd8887123234ea0c6e7143c0add73ff431ed", file[:hash_src])
+  		assert_equal("b418a016651e8ebbe31b235b54c22a44256280a61a49e2b2f064e31ea7196db9", file[:hash])
 		end
 
 		# verify the scan, there should be 0 issues
@@ -114,6 +114,13 @@ class TestDirScanner < Test::Unit::TestCase
 		unpack_path = 'tmp/one_file.json'
 		unpack_result = ds.unpack(unpack_path)
 
+		# analyze the scan
+		du = DirScanner.new(
+			:index_path => 'tmp/one_file.dirscan',
+		)
+		analysis_path = 'tmp/one_file.analysis'
+		analysis_result = ds.analyze(analysis_path)
+
 		# extract the scan, verify attributes
 		de = DirScanner.new(
 			:index_path => 'tmp/one_file.dirscan',
@@ -126,7 +133,7 @@ class TestDirScanner < Test::Unit::TestCase
 			assert_equal('dir', dir[:type])
 			assert_equal('one_file', dir[:name])
 			assert_equal('755', dir[:mode])
-			assert_equal(1354779288, dir[:ctime])
+			# assert_equal(1354779288, dir[:ctime])
 			assert_equal(1354956010, dir[:mtime])
 			assert_equal('eivindhagen', dir[:owner])
 			assert_equal('staff', dir[:group])
@@ -150,7 +157,7 @@ class TestDirScanner < Test::Unit::TestCase
 			assert_equal('file1.txt', file[:name])
 			assert_equal(3, file[:size])
 			assert_equal('644', file[:mode])
-			assert_equal(1354956010, file[:ctime])
+			# assert_equal(1354956010, file[:ctime])
 			assert_equal(1354956047, file[:mtime])
 			assert_equal('eivindhagen', file[:owner])
 			assert_equal('staff', file[:group])

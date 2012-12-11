@@ -12,10 +12,11 @@ class DirScanner
 
 	def initialize(options = {})
 		@options = options
-		@scan_root = options[:scan_root]		# required for scan()
-		@index_path = options[:index_path]	# required for verify() & unpack(). scan() will create index_path if not provided
-		@timestamp = options[:timestamp]		# optional, will be set to current time if not provided
-		@quick_scan = options[:quick_scan]	# optional, will skip checksum and hash calculations for a faster scan
+		@scan_root = options[:scan_root]					# required for scan()
+		@index_path = options[:index_path]				# required for verify() & unpack(). scan() will create index_path if not provided
+		@analysis_path = options[:analysis_path]	# required for analyze()
+		@timestamp = options[:timestamp]					# optional, will be set to current time if not provided
+		@quick_scan = options[:quick_scan]				# optional, will skip checksum and hash calculations for a faster scan
 	end
 
 	# perform a directory scan, by inspecting all files, symlinks and folders (recursively)
@@ -46,9 +47,9 @@ class DirScanner
 			@scan_info[:quick] = true
 		else
 			@scan_info.merge!({
-				:symlink_hash_template	=> 'name+mode+owner+group+ctime+mtime+size'.freeze,	# size of symlink itself, not the target
-				:file_hash_template			=> 'name+mode+owner+group+ctime+mtime+size+sha256'.freeze,	# size and content hash
-				:dir_hash_template			=> 'name+mode+owner+group+ctime+mtime+content_size+content_hash+meta_hash'.freeze,	# size/hash of dir's content
+				:symlink_hash_template	=> 'name+mode+owner+group+mtime+size'.freeze,	# size of symlink itself, not the target
+				:file_hash_template			=> 'name+mode+owner+group+mtime+size+sha256'.freeze,	# size and content hash
+				:dir_hash_template			=> 'name+mode+owner+group+mtime+content_size+content_hash+meta_hash'.freeze,	# size/hash of dir's content
 			})
 		end
 
@@ -183,6 +184,62 @@ class DirScanner
 		end
 	end
 
+	def analyze(text_file_path)
+		throw ":index_path is not set" unless @index_path
+
+		# read the index file
+		IndexFile::Reader.new(index_path) do |index_file|
+			# analysis object
+			file_sizes = {}
+			analysis = {
+				file_sizes: file_sizes
+			}
+
+			# iterate over all the entries
+			while not index_file.eof? do
+				object = index_file.read_object
+
+				case object[:type].to_sym
+				when :dirscan
+				when :dir
+				when :symlink
+				when :file
+					file = object
+					size = file[:size]
+					# increment file size counter
+					file_sizes[size] = (file_sizes[size] || 0) + 1
+				end
+			end
+
+			# write the text file
+			File.open(text_file_path, 'w') do |text_file|
+				text_file.write JSON.pretty_generate(analysis) + "\n"
+			end
+		end
+	end
+
+	def analyze_report(text_file_path)
+		throw ":analysis_path is not set" unless @analysis_path
+
+		File.open(@analysis_path) do |f|
+			analysis = JSON.load(f)
+			file_sizes = analysis['file_sizes']
+			sorted_file_sizes = file_sizes.keys.map{|key| key.to_i}.sort
+			sizes_with_counts = sorted_file_sizes.map{|size| [size, file_sizes["#{size}"]]}
+			sorted_by_count = sizes_with_counts.sort{|a,b| b[1] <=> a[1]}
+			report = {
+				# sorted_file_sizes: sizes_with_counts,
+				sorted_by_count: sorted_by_count,
+			}
+
+			# write the text file
+			File.open(text_file_path, 'w') do |text_file|
+				text_file.write JSON.pretty_generate(report) + "\n"
+			end
+
+		end
+	end
+
 	# scan a directory and all it's sub-directories (recursively)
 	#
 	# Consider this example directory tree:
@@ -214,7 +271,7 @@ class DirScanner
 	  	:path => path,
 	  	:name => File.basename(path),
 	  	:mode => pathinfo.mode,
-	  	:ctime => pathinfo.create_time,
+	  	# :ctime => pathinfo.create_time,
 	  	:mtime => pathinfo.modify_time,
 	  	:owner => pathinfo.owner,
 	  	:group => pathinfo.group,
@@ -249,7 +306,7 @@ class DirScanner
 				  	:name => name,
 				  	:link_path => File.readlink(full_path),
 				  	:mode => pathinfo.mode,
-				  	:ctime => pathinfo.create_time,
+				  	# :ctime => pathinfo.create_time,
 				  	:mtime => pathinfo.modify_time,
 				  	:owner => pathinfo.owner,
 				  	:group => pathinfo.group,
@@ -279,7 +336,7 @@ class DirScanner
 				  	:name => name,
 				  	:size => size,
 				  	:mode => pathinfo.mode,
-				  	:ctime => pathinfo.create_time,
+				  	# :ctime => pathinfo.create_time,
 				  	:mtime => pathinfo.modify_time,
 				  	:owner => pathinfo.owner,
 				  	:group => pathinfo.group,

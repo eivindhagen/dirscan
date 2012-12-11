@@ -1,15 +1,6 @@
 require 'open3'
 require 'time'
 
-def creation_time(file_path)
-	Time.parse(Open3.popen3(
-		"mdls", 
-		"-name",
-		"kMDItemContentCreationDate", 
-		"-raw", file_path)[1].read
-	)
-end
-
 class PathInfo
 	def initialize(file_path)
 		@file_path = file_path
@@ -24,10 +15,23 @@ class PathInfo
 		end
 	end
 
+	# get the original creation time of a file, using an external process to run 'mdls'
+	# WARNING: This is really slow on OSX! It's takes about 4,000 TIMES LONGER than File.mtime()
 	def create_time
 		begin
+			# TODO: check which operating system we are on, and get this value accordingly....
+
 			# File.ctime(@file_path).to_i	# NO NO NO, This is the 'change' time, not the 'create' time :-()
-			creation_time(@file_path).to_i
+
+			# OSX stored the birth time of a file in special metadata that Ruby does not have easy access to,
+			# so start the 'mdls' command in a separate process to extract this info.
+			# WARNING: This is really slow! It's takes about 4,000 TIMES LONGER than File.mtime()
+			return Time.parse(Open3.popen3(
+				"mdls", 
+				"-name",
+				"kMDItemContentCreationDate", 
+				"-raw", @file_path)[1].read
+			).to_i
 		rescue
 			0
 		end

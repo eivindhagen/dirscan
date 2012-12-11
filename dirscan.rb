@@ -47,5 +47,25 @@ when 'u'
 	)
 	ds.unpack(output_path)
 
+when 'a'
+	# analyze index file, writes a JSON analysis document to the output file
+	index_path = ARGV[1]
+	output_path = ARGV[2]
+
+	ds = DirScanner.new(
+		:index_path => index_path,
+	)
+	ds.analyze(output_path)
+
+when 'ar'
+	# analysis report, reads the JSON analysis document from the output file
+	index_path = ARGV[1]
+	output_path = ARGV[2]
+
+	ds = DirScanner.new(
+		:analysis_path => index_path,
+	)
+	ds.analyze_report(output_path) 
+
 end
 
