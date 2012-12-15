@@ -187,31 +187,31 @@ class TestDirScanner < Test::Unit::TestCase
 
   def test_dupes_quick
     # scan
-    inputs = {:scan_root => 'test_data/nested1_with_identical_dir', :quick_scan => true}
-    outputs = {:scan_index => 'tmp/nested1_with_identical_dir.dirscan'}
+    inputs = {:scan_root => 'test_data/nested1_mixed', :quick_scan => true}
+    outputs = {:scan_index => 'tmp/nested1_mixed.dirscan'}
     ds = DirScanner.new(inputs, outputs)
     scan_result = ds.scan
 
     # extract the scan, verify attributes
-    inputs = {:scan_index => 'tmp/nested1_with_identical_dir.dirscan'}
+    inputs = {:scan_index => 'tmp/nested1_mixed.dirscan'}
     outputs = {}
     ds = DirScanner.new(inputs, outputs)
     extract_result = ds.extract
 
     # analyze the scan
-    inputs = {:scan_index => 'tmp/nested1_with_identical_dir.dirscan'}
-    outputs = {:analysis => 'tmp/nested1_with_identical_dir.dirscan.analysis'}
+    inputs = {:scan_index => 'tmp/nested1_mixed.dirscan'}
+    outputs = {:analysis => 'tmp/nested1_mixed.dirscan.analysis'}
     ds = DirScanner.new(inputs, outputs)
     analysis_result = ds.analyze
-    assert_equal({:file_sizes=>{12=>2}}, analysis_result)
+    assert_equal({:file_sizes=>{5=>2, 12=>3, 6148=>1}}, analysis_result)
 
     # iddupe - uses analysis to find exact duplicates
-    inputs = {:scan_index => 'tmp/nested1_with_identical_dir.dirscan', :analysis => 'tmp/nested1_with_identical_dir.dirscan.analysis'}
-    outputs = {:iddupe => 'tmp/nested1_with_identical_dir.dirscan.analysis.iddupe'}
+    inputs = {:scan_index => 'tmp/nested1_mixed.dirscan', :analysis => 'tmp/nested1_mixed.dirscan.analysis'}
+    outputs = {:iddupe => 'tmp/nested1_mixed.dirscan.analysis.iddupe'}
     ds = DirScanner.new(inputs, outputs)
     iddupe_result = ds.iddupe
     assert_equal(
-      {:collection_by_file_size=>{12=>{"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"=>["test_data/nested1_with_identical_dir/dir1/file1", "test_data/nested1_with_identical_dir/dir2/file1"]}}},
+      {:collection_by_file_size=>{12=>{"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"=>["test_data/nested1_mixed/dir1/file1", "test_data/nested1_mixed/dir2/file1"]}}},
       iddupe_result,
     )
   end

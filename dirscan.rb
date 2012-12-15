@@ -42,10 +42,11 @@ def create_pipeline(scan_root, dst_files_dir)
 
       iddupe: { # positively identify duplicate files (within each group of same-size files)
         inputs: {
+          scan_index: scan_index,
           analysis: analysis,
         },
         outputs: {
-          report: iddupe,
+          iddupe: iddupe,
         },
         worker: {
           ruby_class: :DirScanner,
@@ -54,8 +55,8 @@ def create_pipeline(scan_root, dst_files_dir)
       },
     },
 
-    # job_order: [:scan, :analyze, :iddupe],
-    job_order: [:scan, :analyze],
+    job_order: [:scan, :analyze, :iddupe],
+    # job_order: [:scan, :analyze],
   }
 
   return Pipeline.new(pipeline_config)
@@ -66,7 +67,6 @@ command = ARGV[0]
 case command
 
 when 'p'
-when 'pipeline'
   # run a pipeline of jobs
   scan_root = ARGV[1]
   output_files_dir = ARGV[2]

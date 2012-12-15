@@ -284,6 +284,21 @@ class DirScanner < NaiveWorker
         end
       end
 
+      # remove arrays with only a sigle entry
+      collection_by_file_size.each do |file_size, collection|
+        collection.keys.each do |sha256|
+          if collection[sha256].size == 1
+            collection.delete(sha256)
+          end
+        end
+      end
+      # remove empty collections
+      collection_by_file_size.keys.each do |file_size|
+        if collection_by_file_size[file_size].empty?
+          collection_by_file_size.delete(file_size)
+        end
+      end
+
       result = {
         :collection_by_file_size => collection_by_file_size
       }
