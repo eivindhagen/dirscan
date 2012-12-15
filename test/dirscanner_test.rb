@@ -203,7 +203,7 @@ class TestDirScanner < Test::Unit::TestCase
     outputs = {:analysis => 'tmp/nested1_mixed.dirscan.analysis'}
     ds = DirScanner.new(inputs, outputs)
     analysis_result = ds.analyze
-    assert_equal({:file_sizes=>{5=>2, 12=>3, 6148=>1}}, analysis_result)
+    assert_equal({:file_sizes=>{0=>4, 5=>2, 12=>3}}, analysis_result)
 
     # iddupe - uses analysis to find exact duplicates
     inputs = {:scan_index => 'tmp/nested1_mixed.dirscan', :analysis => 'tmp/nested1_mixed.dirscan.analysis'}

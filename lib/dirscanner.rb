@@ -247,8 +247,9 @@ class DirScanner < NaiveWorker
     # create a list of file sizes that should be inspected more carefully
     collection_by_file_size = {}
     file_sizes.each do |size, num|
-      if num > 1
-        collection_by_file_size[size.to_i] = {}  # this hash will collect SHA256 checksums for all files of this size
+      size_i = size.to_i
+      if size_i > 0 && num > 1
+        collection_by_file_size[size_i] = {}  # this hash will collect SHA256 checksums for all files of this size
       end
     end
 
@@ -271,8 +272,8 @@ class DirScanner < NaiveWorker
           dir = object
         when :file
           file = object
-          size = file[:size]
-          if collection = collection_by_file_size[size.to_i]
+          size_i = file[:size].to_i
+          if collection = collection_by_file_size[size_i]
             # puts "dirscan[:scan_root] = #{dirscan[:scan_root]}"
             # puts "dir[:path] = #{dir[:path]}"
             # puts "file[:name] = #{file[:name]}"
