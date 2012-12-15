@@ -38,6 +38,29 @@ end
 
 class TestPipeline < Test::Unit::TestCase
 
+  def job_config_basic
+    {
+      inputs: {
+        read: 'input_path',
+      },
+      outputs: {
+        write: 'output_path',
+      },
+      worker: {
+        ruby_class: TestWorker,
+        ruby_method: :generate,
+      },
+    }
+  end
+
+  def test_job_create
+    job = Job.new(job_config_basic)
+    assert_equal({read: 'input_path'}, job.inputs)
+    assert_equal({write: 'output_path'}, job.outputs)
+    assert_equal(TestWorker, job.ruby_class)
+    assert_equal(:generate, job.ruby_method)
+  end
+     
   def pipeline_config_basic
     {
       jobs: {

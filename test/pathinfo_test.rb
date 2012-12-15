@@ -33,7 +33,7 @@ class TestPathInfo < Test::Unit::TestCase
       end
     end
     time_per_op = time / ops
-    puts "create_time: #{time_per_op*1000000} us/op"
+    # puts "create_time: #{time_per_op*1000000} us/op"
     assert(time_per_op < 0.1)
   end
    
@@ -49,7 +49,7 @@ class TestPathInfo < Test::Unit::TestCase
       end
     end
     time_per_op = time / ops
-    puts "modify_time: #{time_per_op*1000000} us/op"
+    # puts "modify_time: #{time_per_op*1000000} us/op"
     assert(time_per_op < 0.1)
   end
    

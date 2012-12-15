@@ -4,7 +4,7 @@ require File.join(File.dirname(__FILE__), 'lib', 'dirscanner')
 require File.join(File.dirname(__FILE__), 'lib', 'pipeline')
 
 def create_pipeline(scan_root, dst_files_dir)
-  dirname = File.dirname(scan_root)
+  dirname = File.basename(scan_root)
 
   scan_index = File.join dst_files_dir, "#{dirname}.dirscan"
   analysis = File.join dst_files_dir, "#{dirname}.dirscan.analysis"
@@ -33,7 +33,6 @@ def create_pipeline(scan_root, dst_files_dir)
         },
         outputs: {
           analysis: analysis,
-          report: analysis_report,
         },
         worker: {
           ruby_class: :DirScanner,
@@ -46,7 +45,7 @@ def create_pipeline(scan_root, dst_files_dir)
           analysis: analysis,
         },
         outputs: {
-          report: iddupe_report,
+          report: iddupe,
         },
         worker: {
           ruby_class: :DirScanner,
@@ -56,82 +55,24 @@ def create_pipeline(scan_root, dst_files_dir)
     },
 
     # job_order: [:scan, :analyze, :iddupe],
-    job_order: [:scan],
+    job_order: [:scan, :analyze],
   }
 
   return Pipeline.new(pipeline_config)
 end
 
 # command line arguments
-case ARGV[0]
-when 's'
-  # scan dir, creates an index file
-  scan_root = ARGV[1]
-  index_path = ARGV[2]
-
-  ds = DirScanner.new(
-    :scan_root => scan_root,
-    :index_path => index_path,
-  )
-  ds.scan
-
-when 'sq'
-  # scan dir quickly, creates an index file
-  scan_root = ARGV[1]
-  index_path = ARGV[2]
-
-  ds = DirScanner.new(
-    :scan_root => scan_root,
-    :index_path => index_path,
-    :quick_scan => true,
-  )
-  ds.scan
-
-when 'v'
-  # verify index file, compares with original dir
-  index_path = ARGV[1]
-
-  ds = DirScanner.new(
-    :index_path => index_path,
-  )
-  ds.verify
-
-when 'u'
-  # unpack index file, writes a text version of the file
-  index_path = ARGV[1]
-  output_path = ARGV[2]
-
-  ds = DirScanner.new(
-    :index_path => index_path,
-  )
-  ds.unpack(output_path)
-
-when 'a'
-  # analyze index file, writes a JSON analysis document to the output file
-  index_path = ARGV[1]
-  output_path = ARGV[2]
-
-  ds = DirScanner.new(
-    :index_path => index_path,
-  )
-  ds.analyze(output_path)
-
-when 'ar'
-  # analysis report, reads the JSON analysis document from the output file
-  index_path = ARGV[1]
-  output_path = ARGV[2]
-
-  ds = DirScanner.new(
-    :analysis_path => index_path,
-  )
-  ds.analyze_report(output_path) 
+command = ARGV[0]
+case command
 
 when 'p'
+when 'pipeline'
   # run a pipeline of jobs
   scan_root = ARGV[1]
   output_files_dir = ARGV[2]
 
   pipeline = create_pipeline(scan_root, output_files_dir)
   puts pipeline.simulate
-end
+  puts pipeline.run
 
+end

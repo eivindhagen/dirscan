@@ -12,31 +12,32 @@ class DirScanner < NaiveWorker
   attr_accessor :inputs, :outputs
 
   # perform a directory scan, by inspecting all files, symlinks and folders (recursively)
-  # requires that @scan_root and @index_file has already been set
   def scan()
-    throw ":scan_root is not set" unless scan_root = @inputs[:scan_root]
+    required_inputs :scan_root
+    required_outputs :scan_index
 
     timestamp = Time.now.to_i unless @timestamp
     
     # index file will be inside the scan_root foler, unless otherwise specified
-    @outputs[:scan_index] ||= File.join(real_scan_root, ".dirscan_#{timestamp}")
+    # output(:scan_index) ||= File.join(real_scan_root, ".dirscan_#{timestamp}")
 
     # create scan object, contains meta-data for the entire scan
-    @scan_info = {
+    scan_info = {
       :type => :dirscan,
       :host_name => Socket.gethostname,
-      :scan_root => @scan_root,
-      :scan_root_real => Pathname.new(scan_root).realpath,  # turn scan_root into the canonical form, making it absolute, with no symlinks
+      :scan_root => input(:scan_root),
+      :scan_root_real => Pathname.new(input(:scan_root)).realpath,  # turn scan_root into the canonical form, making it absolute, with no symlinks
       :timestamp => timestamp,
-      :index_path => @outputs[:scan_index],
+      :index_path => output(:scan_index),
+      :verbose => input(:verbose, :default => false),
     }
 
     # templates specify how to create the hash source strings for various dir entry types
-    if @inputs[:quick_scan]
+    if input(:quick_scan, :default => false)
       # quick scan does not need hash templates
-      @scan_info[:quick] = true
+      scan_info[:quick] = true
     else
-      @scan_info.merge!({
+      scan_info.merge!({
         :symlink_hash_template  => 'name+mode+owner+group+mtime+size'.freeze, # size of symlink itself, not the target
         :file_hash_template     => 'name+mode+owner+group+mtime+size+sha256'.freeze,  # size and content hash
         :dir_hash_template      => 'name+mode+owner+group+mtime+content_size+content_hash+meta_hash'.freeze,  # size/hash of dir's content
@@ -44,25 +45,25 @@ class DirScanner < NaiveWorker
     end
 
     # create the index file, and perform the scan
-    IndexFile::Writer.new(@outputs[:scan_index]) do |index_file|
+    IndexFile::Writer.new(output(:scan_index)) do |index_file|
       # write dirscan meta-data
-      index_file.write_object(@scan_info)
+      index_file.write_object(scan_info)
 
       # scan recursively
-      @scan_result = scan_recursive(index_file, @scan_info, scan_root)
+      @scan_result = scan_recursive(index_file, scan_info, input(:scan_root))
     end
 
     return @scan_result
   end
 
   def unpack()
-    throw "inputs[:scan_index] is not set" unless @inputs[:scan_index]
-    throw "outputs[:scan_unpack] is not set" unless @outputs[:scan_unpack]
+    required_inputs :scan_index
+    required_outputs :scan_unpack
 
     # read the index file
-    IndexFile::Reader.new(@inputs[:scan_index]) do |index_file|
+    IndexFile::Reader.new(input(:scan_index)) do |index_file|
       # write the text file
-      File.open(@outputs[:scan_unpack], 'w') do |unpack_file|
+      File.open(output(:scan_unpack), 'w') do |unpack_file|
         while not index_file.eof? do
           object = index_file.read_object
           unpack_file.write JSON.pretty_generate(object) + "\n"
@@ -73,7 +74,7 @@ class DirScanner < NaiveWorker
 
 
   def extract()
-    throw "inputs[:scan_index] is not set" unless @inputs[:scan_index]
+    required_inputs :scan_index
 
     result = {
       :dirscan => nil,
@@ -82,7 +83,7 @@ class DirScanner < NaiveWorker
     object_count = 0
 
     # read the index file
-    IndexFile::Reader.new(@inputs[:scan_index]) do |index_file|
+    IndexFile::Reader.new(input(:scan_index)) do |index_file|
       # state objects, updated during parsing
       dir = nil
 
@@ -129,13 +130,13 @@ class DirScanner < NaiveWorker
 
 
   def verify()
-    throw "inputs[:scan_index] is not set" unless @inputs[:scan_index]
+    required_inputs :scan_index
 
     object_count = 0
     issues_count = 0
 
     # read the index file
-    IndexFile::Reader.new(@inputs[:scan_index]) do |index_file|
+    IndexFile::Reader.new(input(:scan_index)) do |index_file|
       # state objects, updated during parsing
       dirscan = {}
       dir = {}
@@ -177,11 +178,11 @@ class DirScanner < NaiveWorker
 
 
   def analyze()
-    throw "inputs[:scan_index_path] is not set" unless @inputs[:scan_index]
-    throw "outputs[:analysis] is not set" unless @outputs[:analysis]
+    required_inputs :scan_index
+    required_outputs :analysis
 
     # read the index file
-    IndexFile::Reader.new(@inputs[:scan_index]) do |index_file|
+    IndexFile::Reader.new(input(:scan_index)) do |index_file|
       # analysis object
       file_sizes = {}
       analysis = {
@@ -205,7 +206,7 @@ class DirScanner < NaiveWorker
       end
 
       # write the text file
-      File.open(@outputs[:analysis], 'w') do |text_file|
+      File.open(output(:analysis), 'w') do |text_file|
         text_file.write JSON.pretty_generate(analysis) + "\n"
       end
   
@@ -214,26 +215,85 @@ class DirScanner < NaiveWorker
   end
 
   def analysis_report
-    throw "inputs[:analysis] is not set" unless @inputs[:analysis]
-    throw "outputs[:analysis_report] is not set" unless @outputs[:analysis_report]
+    required_inputs :analysis
+    required_outputs :analysis_report
 
-    File.open(@inputs[:analysis]) do |f|
-      analysis = JSON.load(f)
-      file_sizes = analysis['file_sizes']
-      sorted_file_sizes = file_sizes.keys.map{|key| key.to_i}.sort
-      sizes_with_counts = sorted_file_sizes.map{|size| [size, file_sizes["#{size}"]]}
-      sorted_by_count = sizes_with_counts.sort{|a,b| b[1] <=> a[1]}
-      report = {
-        # sorted_file_sizes: sizes_with_counts,
-        sorted_by_count: sorted_by_count,
+    analysis = File.open(input(:analysis)){|f| JSON.load(f)}
+    file_sizes = analysis['file_sizes']
+    sorted_file_sizes = file_sizes.keys.map{|key| key.to_i}.sort
+    sizes_with_counts = sorted_file_sizes.map{|size| [size, file_sizes["#{size}"]]}
+    sorted_by_count = sizes_with_counts.sort{|a,b| b[1] <=> a[1]}
+    report = {
+      # sorted_file_sizes: sizes_with_counts,
+      sorted_by_count: sorted_by_count,
+    }
+
+    # write the text file
+    File.open(output(:analysis_report), 'w') do |text_file|
+      text_file.write JSON.pretty_generate(report) + "\n"
+    end
+
+    return report
+  end
+
+  def iddupe()
+    required_inputs :scan_index, :analysis
+    required_outputs :iddupe
+
+    # load up the analysis
+    analysis = File.open(input(:analysis)){|f| JSON.load(f)}
+    file_sizes = analysis['file_sizes']
+
+    # create a list of file sizes that should be inspected more carefully
+    collection_by_file_size = {}
+    file_sizes.each do |size, num|
+      if num > 1
+        collection_by_file_size[size.to_i] = {}  # this hash will collect SHA256 checksums for all files of this size
+      end
+    end
+
+
+    # read the index file
+    IndexFile::Reader.new(input(:scan_index)) do |index_file|
+      # state objects, updated during parsing
+      dirscan = {}
+      dir = {}
+
+      # iterate over all the entries
+      while not index_file.eof? do
+        object = index_file.read_object
+
+        case object[:type].to_sym
+
+        when :dirscan
+          dirscan = object
+        when :dir
+          dir = object
+        when :file
+          file = object
+          size = file[:size]
+          if collection = collection_by_file_size[size.to_i]
+            # puts "dirscan[:scan_root] = #{dirscan[:scan_root]}"
+            # puts "dir[:path] = #{dir[:path]}"
+            # puts "file[:name] = #{file[:name]}"
+            full_path = File.join(dir[:path], file[:name])
+            sha256 = FileHash.sha256(full_path)
+            collection[sha256] ||= []
+            collection[sha256] << full_path
+          end
+        end
+      end
+
+      result = {
+        :collection_by_file_size => collection_by_file_size
       }
 
       # write the text file
-      File.open(@outputs[:analysis_report], 'w') do |text_file|
-        text_file.write JSON.pretty_generate(report) + "\n"
+      File.open(output(:iddupe), 'w') do |text_file|
+        text_file.write JSON.pretty_generate(result) + "\n"
       end
-
-      return report
+  
+      return result
     end
   end
 
@@ -383,7 +443,7 @@ class DirScanner < NaiveWorker
 
     if dirs.count > 0
       dirs.each do |dir|
-        puts "Scanning subdir #{dir} of #{path}"
+        puts "Scanning subdir #{dir} of #{path}" if scan_info[:verbose]
         sub_dir_info = scan_recursive(index_file, scan_info, File.join(path, dir))
 
         #

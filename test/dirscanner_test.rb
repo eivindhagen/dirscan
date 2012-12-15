@@ -37,6 +37,8 @@ class TestDirScanner < Test::Unit::TestCase
     outputs = {}
     ds = DirScanner.new(inputs, outputs)
     extract_result = ds.extract
+    assert_equal('test_data/one_file', extract_result[:dirscan][:scan_root])
+
     dir = extract_result[:dirs]["test_data/one_file"]
     assert_not_nil(dir, "directory 'one_file' should be in the extract result")
     if dir
@@ -100,21 +102,24 @@ class TestDirScanner < Test::Unit::TestCase
   def test_onefile_quick
     # scan
     inputs = {:scan_root => 'test_data/one_file', :quick_scan => true}
-    outputs = {:scan_index => 'tmp/one_file.dirscan'}
+    outputs = {:scan_index => 'tmp/one_file_quick.dirscan'}
     ds = DirScanner.new(inputs, outputs)
     scan_result = ds.scan
 
     # unpack the scan
-    inputs = {:scan_index => 'tmp/one_file.dirscan'}
-    outputs = {:scan_unpack => 'tmp/one_file.json'}
+    inputs = {:scan_index => 'tmp/one_file_quick.dirscan'}
+    outputs = {:scan_unpack => 'tmp/one_file_quick.json'}
     ds = DirScanner.new(inputs, outputs)
     unpack_result = ds.unpack
 
     # extract the scan, verify attributes
-    inputs = {:scan_index => 'tmp/one_file.dirscan'}
+    inputs = {:scan_index => 'tmp/one_file_quick.dirscan'}
     outputs = {}
     ds = DirScanner.new(inputs, outputs)
     extract_result = ds.extract
+    # puts "extract_result: #{extract_result}"
+    assert_equal('test_data/one_file', extract_result[:dirscan][:scan_root])
+
     dir = extract_result[:dirs]["test_data/one_file"]
     assert_not_nil(dir, "directory 'one_file' should be in the extract result")
     if dir
@@ -152,26 +157,63 @@ class TestDirScanner < Test::Unit::TestCase
     end
 
     # verify the scan, there should be 0 issues
-    inputs = {:scan_index => 'tmp/one_file.dirscan'}
+    inputs = {:scan_index => 'tmp/one_file_quick.dirscan'}
     outputs = {}
     ds = DirScanner.new(inputs, outputs)
     verify_result = ds.verify
     assert_equal(0, verify_result[:issues_count])
 
     # analyze the scan
-    inputs = {:scan_index => 'tmp/one_file.dirscan'}
-    outputs = {:analysis => 'tmp/one_file.dirscan.analysis'}
+    inputs = {:scan_index => 'tmp/one_file_quick.dirscan'}
+    outputs = {:analysis => 'tmp/one_file_quick.dirscan.analysis'}
     ds = DirScanner.new(inputs, outputs)
     analysis_result = ds.analyze
     assert_equal({:file_sizes=>{3=>1}}, analysis_result)
 
     # analysis report
-    inputs = {:analysis => 'tmp/one_file.dirscan.analysis'}
-    outputs = {:analysis_report => 'tmp/one_file.dirscan.analysis.report'}
+    inputs = {:analysis => 'tmp/one_file_quick.dirscan.analysis'}
+    outputs = {:analysis_report => 'tmp/one_file_quick.dirscan.analysis.report'}
     ds = DirScanner.new(inputs, outputs)
     analysis_report = ds.analysis_report
     assert_equal({:sorted_by_count=>[[3, 1]]}, analysis_report)
 
+    # iddupe - uses analysis to find exact duplicates
+    inputs = {:scan_index => 'tmp/one_file_quick.dirscan', :analysis => 'tmp/one_file_quick.dirscan.analysis'}
+    outputs = {:iddupe => 'tmp/one_file_quick.dirscan.analysis.iddupe'}
+    ds = DirScanner.new(inputs, outputs)
+    iddupe_result = ds.iddupe
+    assert_equal({:collection_by_file_size=>{}}, iddupe_result, "there should be no dupes")
+  end
+
+  def test_dupes_quick
+    # scan
+    inputs = {:scan_root => 'test_data/nested1_with_identical_dir', :quick_scan => true}
+    outputs = {:scan_index => 'tmp/nested1_with_identical_dir.dirscan'}
+    ds = DirScanner.new(inputs, outputs)
+    scan_result = ds.scan
+
+    # extract the scan, verify attributes
+    inputs = {:scan_index => 'tmp/nested1_with_identical_dir.dirscan'}
+    outputs = {}
+    ds = DirScanner.new(inputs, outputs)
+    extract_result = ds.extract
+
+    # analyze the scan
+    inputs = {:scan_index => 'tmp/nested1_with_identical_dir.dirscan'}
+    outputs = {:analysis => 'tmp/nested1_with_identical_dir.dirscan.analysis'}
+    ds = DirScanner.new(inputs, outputs)
+    analysis_result = ds.analyze
+    assert_equal({:file_sizes=>{12=>2}}, analysis_result)
+
+    # iddupe - uses analysis to find exact duplicates
+    inputs = {:scan_index => 'tmp/nested1_with_identical_dir.dirscan', :analysis => 'tmp/nested1_with_identical_dir.dirscan.analysis'}
+    outputs = {:iddupe => 'tmp/nested1_with_identical_dir.dirscan.analysis.iddupe'}
+    ds = DirScanner.new(inputs, outputs)
+    iddupe_result = ds.iddupe
+    assert_equal(
+      {:collection_by_file_size=>{12=>{"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"=>["test_data/nested1_with_identical_dir/dir1/file1", "test_data/nested1_with_identical_dir/dir2/file1"]}}},
+      iddupe_result,
+    )
   end
    
 end
