@@ -31,7 +31,6 @@ class TestWorker < NaiveWorker
   def print
     msg = nil
     File.open(@inputs[:file_path], 'r'){|f| msg = f.read}
-    puts msg
     return msg
   end
 end
