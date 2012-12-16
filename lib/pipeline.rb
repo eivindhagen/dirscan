@@ -1,4 +1,4 @@
-class NaiveWorker
+class Worker
   def initialize(inputs, outputs)
     @inputs = inputs
     @outputs = outputs
@@ -39,6 +39,7 @@ class NaiveWorker
   end
 end
 
+
 class Job
   def initialize(job_config)
     @config = job_config
@@ -72,24 +73,46 @@ class Job
   end
 end
 
+
+class LazyJob < Job # will not run the job if the output(s) already exist
+  def run
+    outputs.each do |output_key, output_value|
+      unless File.exist?(output_value)
+        return super
+      end
+    end
+    return nil
+  end
+
+  def simulate
+    outputs.each do |output_key, output_value|
+      unless File.exist?(output_value)
+        return super
+      end
+    end
+    return nil
+  end
+end
+
+
 class Pipeline
   def initialize(pipeline_config)
     @config = pipeline_config
   end
 
-  def run
+  def run(job_class = Job)
     result = nil
     @config[:job_order].each do |job|
-      job = Job.new(@config[:jobs][job])
+      job = job_class.new(@config[:jobs][job])
       result = job.run
     end
     return result
   end
 
-  def simulate
+  def simulate(job_class = Job)
     result = []
     @config[:job_order].each do |job|
-      job = Job.new(@config[:jobs][job])
+      job = job_class.new(@config[:jobs][job])
       result << job.simulate
     end
     return result

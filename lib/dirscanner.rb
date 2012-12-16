@@ -8,7 +8,7 @@ require 'json'
 require 'bindata'
 require 'socket'
 
-class DirScanner < NaiveWorker
+class DirScanner < Worker
   attr_accessor :inputs, :outputs
 
   # perform a directory scan, by inspecting all files, symlinks and folders (recursively)
@@ -279,8 +279,10 @@ class DirScanner < NaiveWorker
             # puts "file[:name] = #{file[:name]}"
             full_path = File.join(dir[:path], file[:name])
             sha256 = FileHash.sha256(full_path)
-            collection[sha256] ||= []
-            collection[sha256] << full_path
+            if sha256
+              collection[sha256] ||= []
+              collection[sha256] << full_path
+            end
           end
         end
       end
@@ -312,6 +314,36 @@ class DirScanner < NaiveWorker
       return result
     end
   end
+
+  def iddupe_report
+    required_inputs :iddupe
+    required_outputs :iddupe_report
+
+    iddupe = File.open(input(:iddupe)){|f| JSON.load(f)}
+    collection_by_file_size = iddupe['collection_by_file_size']
+    sorted_file_sizes = collection_by_file_size.keys.map{|key| key.to_i}.sort.reverse # largest files first
+    sizes_with_dupes = sorted_file_sizes.map do |size|
+      dupes = collection_by_file_size["#{size}"]
+      redundant_size = 0
+      dupes.each do |sha256, paths|
+        redundant_size += size * (paths.size-1)
+      end
+      [size, redundant_size, dupes]
+    end
+
+    report = {
+      # sorted_file_sizes: sizes_with_counts,
+      sizes_with_dupes: sizes_with_dupes,
+    }
+
+    # write the text file
+    File.open(output(:iddupe_report), 'w') do |text_file|
+      text_file.write JSON.pretty_generate(report) + "\n"
+    end
+
+    return report
+  end
+
 
   # scan a directory and all it's sub-directories (recursively)
   #

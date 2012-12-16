@@ -7,23 +7,12 @@ require 'redgreen'
 
 #include the classes we are testing
 require File.expand_path('../lib/pipeline.rb', File.dirname(__FILE__))
-
-def assert_file_contains(expected, file_path, message = nil)
-  assert(File.exist?(file_path), "File #{file_path} should exist")
-
-  expected_size = expected.size
-  actual_size = File.size(file_path)
-  assert_equal(expected_size, actual_size, "File #{file_path} should be #{expected_size} bytes in size.")
-  File.open(file_path) do |f|
-    actual = f.read
-    assert_equal(expected, actual, "File #{file_path} should contain the expected data.")
-  end
-end
+require File.expand_path('../lib/assert_file_contains.rb', File.dirname(__FILE__))
 
 PHASE_1_MSG = "This is phase 1 of the test."
 PHASE_1_PATH = "tmp/pipeline_test_phase1.txt"
 
-class TestWorker < NaiveWorker
+class MyWorker < Worker
   def generate
     File.open(@outputs[:file_path], 'w'){|f| f.write PHASE_1_MSG}
   end
@@ -35,18 +24,20 @@ class TestWorker < NaiveWorker
   end
 end
 
-class TestPipeline < Test::Unit::TestCase
+class TestJob < Test::Unit::TestCase
+  INPUT_PATH = 'tmp/input.txt'
+  OUTPUT_PATH = 'tmp/output.txt'
 
   def job_config_basic
     {
       inputs: {
-        read: 'input_path',
+        read: INPUT_PATH,
       },
       outputs: {
-        write: 'output_path',
+        write: OUTPUT_PATH,
       },
       worker: {
-        ruby_class: TestWorker,
+        ruby_class: MyWorker,
         ruby_method: :generate,
       },
     }
@@ -54,12 +45,26 @@ class TestPipeline < Test::Unit::TestCase
 
   def test_job_create
     job = Job.new(job_config_basic)
-    assert_equal({read: 'input_path'}, job.inputs)
-    assert_equal({write: 'output_path'}, job.outputs)
-    assert_equal(TestWorker, job.ruby_class)
+    assert_equal({read: INPUT_PATH}, job.inputs)
+    assert_equal({write: OUTPUT_PATH}, job.outputs)
+    assert_equal(MyWorker, job.ruby_class)
     assert_equal(:generate, job.ruby_method)
   end
-     
+
+  def test_job_lazy
+    job = LazyJob.new(job_config_basic)
+    File.delete(OUTPUT_PATH) if File.exist?(OUTPUT_PATH)
+    sim = job.simulate
+    assert_equal("MyWorker.new({:read=>\"tmp/input.txt\"}, {:write=>\"tmp/output.txt\"}).generate", sim, "When output files is missing, sim should generate it")
+
+    File.open(OUTPUT_PATH, 'w'){|f| f.write('test')}
+    sim = job.simulate
+    assert_nil(sim, "When outout file exist, sim should do nothing")
+  end
+end
+
+class TestPipeline < Test::Unit::TestCase
+
   def pipeline_config_basic
     {
       jobs: {
@@ -69,7 +74,7 @@ class TestPipeline < Test::Unit::TestCase
             file_path: PHASE_1_PATH,
           },
           worker: {
-            ruby_class: TestWorker,
+            ruby_class: MyWorker,
             ruby_method: :generate,
           },
         },
@@ -80,7 +85,7 @@ class TestPipeline < Test::Unit::TestCase
           outputs: {
           },
           worker: {
-            ruby_class: TestWorker,
+            ruby_class: MyWorker,
             ruby_method: :print,
           },
         },
@@ -101,10 +106,10 @@ class TestPipeline < Test::Unit::TestCase
     pipeline = Pipeline.new(pipeline_config_basic)
     result = pipeline.simulate
     expected_sim = [ # NOTE: adding escaped new-line chars to match the output from simulate()
-      "TestWorker.new({}, {:file_path=>\"#{PHASE_1_PATH}\"}).generate",
-      "TestWorker.new({:file_path=>\"#{PHASE_1_PATH}\"}, {}).print",
+      "MyWorker.new({}, {:file_path=>\"#{PHASE_1_PATH}\"}).generate",
+      "MyWorker.new({:file_path=>\"#{PHASE_1_PATH}\"}, {}).print",
     ]
     assert_equal(expected_sim, result)
   end
-     
+
 end

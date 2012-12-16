@@ -17,6 +17,7 @@ def create_pipeline(scan_root, dst_files_dir)
       scan: { # scan a directory and record file info for entire tree
         inputs: {
           scan_root: scan_root,
+          quick_scan: true,       # quick_scan = do not generate content checksums
         },
         outputs: {
           scan_index: scan_index,
@@ -53,10 +54,22 @@ def create_pipeline(scan_root, dst_files_dir)
           ruby_method: :iddupe,
         }
       },
+
+      iddupe_report: { # generate summary of duplicate files, including the number of redundant bytes or each file-size
+        inputs: {
+          iddupe: iddupe,
+        },
+        outputs: {
+          iddupe_report: iddupe_report,
+        },
+        worker: {
+          ruby_class: :DirScanner,
+          ruby_method: :iddupe_report,
+        }
+      },
     },
 
-    job_order: [:scan, :analyze, :iddupe],
-    # job_order: [:scan, :analyze],
+    job_order: [:scan, :analyze, :iddupe, :iddupe_report],
   }
 
   return Pipeline.new(pipeline_config)
@@ -72,7 +85,7 @@ when 'p'
   output_files_dir = ARGV[2]
 
   pipeline = create_pipeline(scan_root, output_files_dir)
-  puts pipeline.simulate
-  puts pipeline.run
+  puts pipeline.simulate(LazyJob)
+  puts pipeline.run(LazyJob)
 
 end

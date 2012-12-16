@@ -203,7 +203,14 @@ class TestDirScanner < Test::Unit::TestCase
     outputs = {:analysis => 'tmp/nested1_mixed.dirscan.analysis'}
     ds = DirScanner.new(inputs, outputs)
     analysis_result = ds.analyze
-    assert_equal({:file_sizes=>{0=>4, 5=>2, 12=>3}}, analysis_result)
+    assert_equal({:file_sizes=>{0=>4, 5=>2, 12=>3, 50=>3}}, analysis_result)
+
+    # analysis report
+    inputs = {:analysis => 'tmp/nested1_mixed.dirscan.analysis'}
+    outputs = {:analysis_report => 'tmp/nested1_mixed.dirscan.analysis.report'}
+    ds = DirScanner.new(inputs, outputs)
+    analysis_report = ds.analysis_report
+    assert_equal({:sorted_by_count=>[[0, 4], [12, 3], [50, 3], [5, 2]]}, analysis_report)
 
     # iddupe - uses analysis to find exact duplicates
     inputs = {:scan_index => 'tmp/nested1_mixed.dirscan', :analysis => 'tmp/nested1_mixed.dirscan.analysis'}
@@ -211,8 +218,34 @@ class TestDirScanner < Test::Unit::TestCase
     ds = DirScanner.new(inputs, outputs)
     iddupe_result = ds.iddupe
     assert_equal(
-      {:collection_by_file_size=>{12=>{"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"=>["test_data/nested1_mixed/dir1/file1", "test_data/nested1_mixed/dir2/file1"]}}},
+      {:collection_by_file_size=>{
+        12=>
+          {"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"=>
+            ["test_data/nested1_mixed/dir1/file1",
+             "test_data/nested1_mixed/dir2/file1"]
+          },
+        50=>
+          {"9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5"=>
+            ["test_data/nested1_mixed/dir1/story",
+             "test_data/nested1_mixed/dir2/story",
+             "test_data/nested1_mixed/dir3/story"]
+          }
+        }
+      },
       iddupe_result,
+    )
+
+    # iddupe report - creates a summary from the iddupe result, showing the number of redundant bytes for each file-size
+    inputs = {:iddupe => 'tmp/nested1_mixed.dirscan.analysis.iddupe'}
+    outputs = {:iddupe_report => 'tmp/nested1_mixed.dirscan.analysis.iddupe.json'}
+    ds = DirScanner.new(inputs, outputs)
+    iddupe_report = ds.iddupe_report
+    assert_equal(
+      {:sizes_with_dupes=>[
+        [50, 100, {"9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5"=>["test_data/nested1_mixed/dir1/story", "test_data/nested1_mixed/dir2/story", "test_data/nested1_mixed/dir3/story"]}],
+        [12, 12, {"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"=>["test_data/nested1_mixed/dir1/file1", "test_data/nested1_mixed/dir2/file1"]}]
+      ]},
+      iddupe_report
     )
   end
    
