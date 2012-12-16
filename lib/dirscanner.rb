@@ -322,16 +322,26 @@ class DirScanner < Worker
     iddupe = File.open(input(:iddupe)){|f| JSON.load(f)}
     collection_by_file_size = iddupe['collection_by_file_size']
     sorted_file_sizes = collection_by_file_size.keys.map{|key| key.to_i}.sort.reverse # largest files first
+    total_redundant_files_count = 0
+    total_redundant_size = 0
     sizes_with_dupes = sorted_file_sizes.map do |size|
       dupes = collection_by_file_size["#{size}"]
       redundant_size = 0
       dupes.each do |sha256, paths|
-        redundant_size += size * (paths.size-1)
+        redundant_files_count = paths.size - 1
+        redundant_size += size * redundant_files_count
+
+        total_redundant_files_count += redundant_files_count
+        total_redundant_size += redundant_size
       end
       [size, redundant_size, dupes]
     end
 
     report = {
+      summary: {
+        total_redundant_files_count: total_redundant_files_count,
+        total_redundant_size: total_redundant_size,
+      },
       # sorted_file_sizes: sizes_with_counts,
       sizes_with_dupes: sizes_with_dupes,
     }
