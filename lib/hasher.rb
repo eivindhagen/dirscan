@@ -15,11 +15,19 @@ end
 
 class FileHash
   def self.md5(file_path)
-    Digest::MD5.file(file_path).hexdigest
+    begin
+      Digest::MD5.file(file_path).hexdigest
+    rescue
+      nil
+    end
   end
 
   def self.sha256(file_path)
-    Digest::SHA256.file(file_path).hexdigest
+    begin
+      Digest::SHA256.file(file_path).hexdigest
+    rescue
+      nil
+    end
   end
 end
 
