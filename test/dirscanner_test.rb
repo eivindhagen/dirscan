@@ -242,7 +242,7 @@ class TestDirScanner < Test::Unit::TestCase
     iddupe_report = ds.iddupe_report
     assert_equal(
       {
-        :sizes_with_dupes=>[
+        :dupes_by_file_size=>[
           [50, 100, {"9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5"=>["test_data/nested1_mixed/dir1/story", "test_data/nested1_mixed/dir2/story", "test_data/nested1_mixed/dir3/story"]}],
           [12, 12, {"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"=>["test_data/nested1_mixed/dir1/file1", "test_data/nested1_mixed/dir2/file1"]}]
         ],
