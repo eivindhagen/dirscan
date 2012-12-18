@@ -19,6 +19,7 @@ class TestDirScanner < Test::Unit::TestCase
     assert_equal(nil, ds.inputs[:timestamp])
   end
    
+  # full scan collects per-file content hashes, which is slow, but makes it easy to find exact duplicates later
   def test_onefile_full
     # scan
     inputs = {:scan_root => 'test_data/one_file'}
@@ -99,6 +100,8 @@ class TestDirScanner < Test::Unit::TestCase
     assert_equal(0, verify_result[:issues_count])
   end
 
+  # quick scan omits the per-file content hashes, instead the laters processes will hash same-size files
+  # in order to locate duplicates more efficiently
   def test_onefile_quick
     # scan
     inputs = {:scan_root => 'test_data/one_file', :quick_scan => true}
@@ -168,7 +171,7 @@ class TestDirScanner < Test::Unit::TestCase
     outputs = {:analysis => 'tmp/one_file_quick.dirscan.analysis'}
     ds = DirScanner.new(inputs, outputs)
     analysis_result = ds.analyze
-    assert_equal({:file_sizes=>{3=>1}}, analysis_result)
+    assert_equal({:file_sizes=>{3=>1}, :dir_sizes=>{3=>1}}, analysis_result)
 
     # analysis report
     inputs = {:analysis => 'tmp/one_file_quick.dirscan.analysis'}
@@ -182,15 +185,23 @@ class TestDirScanner < Test::Unit::TestCase
     outputs = {:iddupe => 'tmp/one_file_quick.dirscan.analysis.iddupe'}
     ds = DirScanner.new(inputs, outputs)
     iddupe_result = ds.iddupe
-    assert_equal({:collection_by_file_size=>{}}, iddupe_result, "there should be no dupes")
+    assert_equal({:collection_by_file_size=>{}, :sha256_by_path=>{}}, iddupe_result, "there should be no dupes")
   end
 
+  # quick scan omits the per-file content hashes, instead the laters processes will hash same-size files
+  # in order to locate duplicates more efficiently
   def test_dupes_quick
     # scan
     inputs = {:scan_root => 'test_data/nested1_mixed', :quick_scan => true}
     outputs = {:scan_index => 'tmp/nested1_mixed.dirscan'}
     ds = DirScanner.new(inputs, outputs)
     scan_result = ds.scan
+
+    # unpack the scan
+    inputs = {:scan_index => 'tmp/nested1_mixed.dirscan'}
+    outputs = {:scan_unpack => 'tmp/nested1_mixed.json'}
+    ds = DirScanner.new(inputs, outputs)
+    unpack_result = ds.unpack
 
     # extract the scan, verify attributes
     inputs = {:scan_index => 'tmp/nested1_mixed.dirscan'}
@@ -203,7 +214,7 @@ class TestDirScanner < Test::Unit::TestCase
     outputs = {:analysis => 'tmp/nested1_mixed.dirscan.analysis'}
     ds = DirScanner.new(inputs, outputs)
     analysis_result = ds.analyze
-    assert_equal({:file_sizes=>{0=>4, 5=>2, 12=>3, 50=>3}}, analysis_result)
+    assert_equal({:file_sizes=>{0=>4, 5=>2, 12=>3, 50=>3}, :dir_sizes=>{0=>1, 5=>2, 62=>3, 196=>1}}, analysis_result)
 
     # analysis report
     inputs = {:analysis => 'tmp/nested1_mixed.dirscan.analysis'}
@@ -230,7 +241,17 @@ class TestDirScanner < Test::Unit::TestCase
              "test_data/nested1_mixed/dir2/story",
              "test_data/nested1_mixed/dir3/story"]
           }
-        }
+        },
+        :sha256_by_path=>{
+          "test_data/nested1_mixed/dir1/file1"=>"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+          "test_data/nested1_mixed/dir1/story"=>"9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5",
+          "test_data/nested1_mixed/dir2/file1"=>"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+          "test_data/nested1_mixed/dir2/story"=>"9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5",
+          "test_data/nested1_mixed/dir3/file3"=>"d9a4c6676a62cb3b8ca0b8459ab341837cdba8543316c8574b454ccc24d4c690",
+          "test_data/nested1_mixed/dir3/story"=>"9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5",
+          "test_data/nested1_mixed/dir4/file4"=>"ab929fcd5594037960792ea0b98caf5fdaf6b60645e4ef248c28db74260f393e",
+          "test_data/nested1_mixed/dir5/file5"=>"ac169f9fb7cb48d431466d7b3bf2dc3e1d2e7ad6630f6b767a1ac1801c496b35",
+        },
       },
       iddupe_result,
     )
@@ -250,6 +271,23 @@ class TestDirScanner < Test::Unit::TestCase
       },
       iddupe_report
     )
+
+    # iddupe_dir - uses iddupe to find duplicate dir's
+    inputs = {:scan_index => 'tmp/nested1_mixed.dirscan', :analysis => 'tmp/nested1_mixed.dirscan.analysis', :iddupe => 'tmp/nested1_mixed.dirscan.analysis.iddupe'}
+    outputs = {:iddupe_dir => 'tmp/nested1_mixed.dirscan.analysis.iddupe_dir'}
+    ds = DirScanner.new(inputs, outputs)
+    result = ds.iddupe_dir
+    assert_equal(
+      {
+        :collection_by_dir_size=>{
+          62=>{
+            "2e5fbfb3a248c9fa7575c3dd1301ec18" => ["test_data/nested1_mixed/dir1", "test_data/nested1_mixed/dir2"]
+          }
+        }
+      },
+      result,
+    )
+
   end
    
 end

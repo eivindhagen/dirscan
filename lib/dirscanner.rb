@@ -38,7 +38,7 @@ class DirScanner < Worker
       scan_info[:quick] = true
     else
       scan_info.merge!({
-        :symlink_hash_template  => 'name+mode+owner+group+mtime+size'.freeze, # size of symlink itself, not the target
+        :symlink_hash_template  => 'name+mode+owner+group+mtime+link_path'.freeze, # size of symlink itself, not the target
         :file_hash_template     => 'name+mode+owner+group+mtime+size+sha256'.freeze,  # size and content hash
         :dir_hash_template      => 'name+mode+owner+group+mtime+content_size+content_hash+meta_hash'.freeze,  # size/hash of dir's content
       })
@@ -185,9 +185,7 @@ class DirScanner < Worker
     IndexFile::Reader.new(input(:scan_index)) do |index_file|
       # analysis object
       file_sizes = {}
-      analysis = {
-        file_sizes: file_sizes
-      }
+      dir_sizes = {}
 
       # iterate over all the entries
       while not index_file.eof? do
@@ -196,14 +194,24 @@ class DirScanner < Worker
         case object[:type].to_sym
         when :dirscan
         when :dir
+          dir = object
+          if (rec = dir[:recursive]) && (dir_size = rec[:content_size])
+            # increment dir size counter
+            dir_sizes[dir_size] = (dir_sizes[dir_size] || 0) + 1
+          end
         when :symlink
         when :file
           file = object
-          size = file[:size]
+          file_size = file[:size]
           # increment file size counter
-          file_sizes[size] = (file_sizes[size] || 0) + 1
+          file_sizes[file_size] = (file_sizes[file_size] || 0) + 1
         end
       end
+
+      analysis = {
+        file_sizes: file_sizes,
+        dir_sizes: dir_sizes,
+      }
 
       # write the text file
       File.open(output(:analysis), 'w') do |text_file|
@@ -240,18 +248,20 @@ class DirScanner < Worker
     required_inputs :scan_index, :analysis
     required_outputs :iddupe
 
-    # load up the analysis
+    # load up the analysis, so we know which file-sizes may have duplicates
     analysis = File.open(input(:analysis)){|f| JSON.load(f)}
     file_sizes = analysis['file_sizes']
 
     # create a list of file sizes that should be inspected more carefully
-    collection_by_file_size = {}
+    collection_by_file_size = {} # { file_size => { sha256 => [path1, path2, ...]} }
     file_sizes.each do |size, num|
       size_i = size.to_i
       if size_i > 0 && num > 1
         collection_by_file_size[size_i] = {}  # this hash will collect SHA256 checksums for all files of this size
       end
     end
+
+    sha256_by_path = {} # { path => sha256 }
 
 
     # read the index file
@@ -272,8 +282,9 @@ class DirScanner < Worker
           dir = object
         when :file
           file = object
-          size_i = file[:size].to_i
-          if collection = collection_by_file_size[size_i]
+          size = file[:size]
+          collection = collection_by_file_size[size]
+          if collection
             # puts "dirscan[:scan_root] = #{dirscan[:scan_root]}"
             # puts "dir[:path] = #{dir[:path]}"
             # puts "file[:name] = #{file[:name]}"
@@ -282,12 +293,14 @@ class DirScanner < Worker
             if sha256
               collection[sha256] ||= []
               collection[sha256] << full_path
+
+              sha256_by_path[full_path] = sha256
             end
           end
         end
       end
 
-      # remove arrays with only a sigle entry
+      # remove sha256-arrays with only a single entry (no duplicates were found for that sha256)
       collection_by_file_size.each do |file_size, collection|
         collection.keys.each do |sha256|
           if collection[sha256].size == 1
@@ -295,7 +308,7 @@ class DirScanner < Worker
           end
         end
       end
-      # remove empty collections
+      # remove empty collections (there were no duplicates for that file-size)
       collection_by_file_size.keys.each do |file_size|
         if collection_by_file_size[file_size].empty?
           collection_by_file_size.delete(file_size)
@@ -303,7 +316,8 @@ class DirScanner < Worker
       end
 
       result = {
-        :collection_by_file_size => collection_by_file_size
+        :collection_by_file_size => collection_by_file_size,
+        :sha256_by_path => sha256_by_path,
       }
 
       # write the text file
@@ -355,6 +369,220 @@ class DirScanner < Worker
   end
 
 
+  def iddupe_dir()
+    required_inputs :scan_index, :analysis, :iddupe
+    required_outputs :iddupe_dir
+
+    # load up the analysis, so we know which dir-sizes may have duplicates
+    analysis = File.open(input(:analysis)){|f| JSON.load(f)}
+    file_sizes = analysis['file_sizes']
+    dir_sizes = analysis['dir_sizes']
+
+    # load up iddupe, so we know which file-sizes have duplicates, and the sha256 for all known duplicate files
+    iddupe = File.open(input(:iddupe)){|f| JSON.load(f)}
+    dupes_by_file_size = iddupe['dupes_by_file_size']
+    sha256_by_path = iddupe['sha256_by_path']
+
+    # create a list of dir-sizes that should be inspected more carefully
+    collection_by_dir_size = {} # { dir_size => { content_hash => [path1, path2, ...]} }
+    dir_sizes.each do |size, num|
+      size_i = size.to_i
+      if size_i > 0 && num > 1
+        collection_by_dir_size[size_i] = {}  # this hash will collect content_hashes for all dirs of this size
+      end
+    end
+
+    active_dirs = {} # for each active dir, store list of files for the dir so we can calculate dir_size and content_hash at the end
+
+    symlink_hash_template  = 'name+mode+owner+group+mtime+link_path'.freeze, # size of symlink itself, not the target
+    file_hash_template     = 'name+mode+owner+group+mtime+size+sha256'.freeze,  # size and content hash
+    dir_hash_template      = 'name+mode+owner+group+mtime+content_size+content_hash+meta_hash'.freeze,  # size/hash of dir's content
+
+    # read the index file
+    IndexFile::Reader.new(input(:scan_index)) do |index_file|
+      # state objects, updated during parsing
+      dirscan = nil
+      dir = nil
+
+      # iterate over all the entries
+      while not index_file.eof? do
+        object = index_file.read_object
+
+        case object[:type].to_sym
+
+        when :dirscan
+          dirscan = object
+        when :dir
+          parent_dir = dir # keep this so we can add the dir to it's parent (initial record only)
+          dir = object
+          if dir[:recursive].nil?
+
+            # initial dir entry (lacking the :recursive entry), setup working object and store in active_dirs
+            active_dirs[dir[:path]] = dir
+            
+            # accumulators used during index parsing
+            dir[:content_size] = 0      # recursive size
+            dir[:symlink_count] = 0     # recursive count
+            dir[:dir_count] = 0         # recursive count
+            dir[:file_count] = 0        # recursive count
+            dir[:symlinks] = []         # direct children
+            dir[:dirs] = []             # direct children
+            dir[:files] = []            # direct children
+            # dir[:content_hashes] = []
+            # dir[:meta_hashes] = []
+
+            # cross-referenced, so we can find our parent/child again later, easily
+            dir[:parent_dir] = parent_dir
+
+            # add dir to it's parent
+            if parent_dir
+              parent_dir[:dirs] << dir
+            end
+
+          else
+
+            # final dir entry (has the :recursive entry), retrieve working object from active_dirs
+            active_dir = active_dirs[dir[:path]]
+
+            # the content_size muse be one of the interesting ones, or this is just a waste of time
+            size = active_dir[:content_size]
+            collection = collection_by_dir_size[size]
+            if collection
+
+              # only bother with checksums if the number of symlinks/dir/files match the final record
+              # this is an optimization, since we only add files to the current dir if that file's size
+              # is such that it may have duplicates. stray files will effectively short-circuit this
+              # and quickly eliminate dir's that contain unique files.
+              content_size_ok = (active_dir[:content_size] == dir[:recursive][:content_size])
+              symlinks_ok = (active_dir[:symlink_count] == dir[:recursive][:symlink_count])
+              dirs_ok = (active_dir[:dir_count] == dir[:recursive][:dir_count])
+              files_ok = (active_dir[:file_count] == dir[:recursive][:file_count])
+              if content_size_ok && symlinks_ok && dirs_ok && files_ok
+                puts "\nrecursive counts match"
+                
+                # build hashes from all our symlinks/files/dirs
+                content_hashes = []
+                meta_hashes = []
+
+                # symlinks
+                active_dir[:symlinks].each do |symlink|
+                  hasher = Hasher.new(symlink_hash_template, symlink)
+                  symlink[:hash_src] = hasher.source
+                  symlink[:hash] = hasher.hash
+
+                  # no content_hash for symlinks
+                  meta_hashes << symlink[:hash]
+                end
+
+                # files
+                active_dir[:files].each do |file|
+                  full_path = File.join(active_dir[:path], file[:name])
+                  file[:sha256] = sha256_by_path[full_path] || FileHash.sha256(full_path)
+
+                  hasher = Hasher.new(file_hash_template, file)
+                  file[:hash_src] = hasher.source
+                  file[:hash] = hasher.hash
+
+                  content_hashes << file[:sha256]
+                  meta_hashes << file[:hash]
+                end
+
+                # dirs
+                active_dir[:dirs].each do |dir|
+                  hasher = Hasher.new(dir_hash_template, dir)
+                  dir[:hash_src] = hasher.source
+                  dir[:hash] = hasher.hash
+
+                  content_hashes << dir[:content_hash]
+                  meta_hashes << dir[:meta_hash]
+                end
+
+                # generate hashes for this level
+                active_dir[:content_hash_src] = content_hashes.join(HASH_SRC_JOIN)
+                active_dir[:meta_hash_src] = meta_hashes.join(HASH_SRC_JOIN)
+                active_dir[:content_hash] = StringHash.md5(active_dir[:content_hash_src])
+                active_dir[:meta_hash] = StringHash.md5(active_dir[:meta_hash_src])
+
+                content_hash = active_dir[:content_hash]
+                collection[content_hash] ||= []
+                collection[content_hash] << active_dir[:path]
+
+
+              else
+                puts "\nrecursive counts mis-match"
+                puts "content_size_ok: #{content_size_ok}"
+                puts "symlinks_ok: #{symlinks_ok}"
+                puts "dirs_ok: #{dirs_ok}"
+                puts "files_ok: #{files_ok}"
+              end
+            end
+
+            # puts "active_dir: #{active_dir.to_yaml}"
+            # puts "dir[:recursive]: #{dir[:recursive].to_yaml}"
+            # puts "----------\n"
+
+            # accumulate our totals up to our parent
+            # TODO: only do this if content_hash matches for the current dir
+            parent_dir = active_dir[:parent_dir]
+            if parent_dir
+              parent_dir[:content_size] += active_dir[:content_size]
+              parent_dir[:symlink_count] += active_dir[:symlinks].count
+              parent_dir[:dir_count] += active_dir[:dirs].count + 1 # +1 for the current dir itself
+              parent_dir[:file_count] += active_dir[:files].count
+            end
+
+            # remove all dirs nested under this one from active_dirs
+            # TODO:
+
+            # this is the last entry, so reset dir to our parent (i.e. pop the stack)
+            dir = parent_dir
+          end
+        when :symlink
+          file = object
+          dir[:symlink_count] += 1
+          dir[:symlinks] << file
+        when :file
+          file = object
+          size = file[:size]
+          dir[:content_size] += size # always accumulate this, it should always match the final dir record (self-test)
+          
+          num_files_of_this_size = file_sizes["#{size}"]
+          if num_files_of_this_size > 1
+            dir[:file_count] += 1
+            dir[:files] << file
+          end
+        end
+      end
+
+      # remove arrays with only a single entry (no duplicates were found for that checksum)
+      collection_by_dir_size.each do |dir_size, collection|
+        collection.keys.each do |checksum|
+          if collection[checksum].size == 1
+            collection.delete(checksum)
+          end
+        end
+      end
+      # remove empty collections (there were no duplicates for that size)
+      collection_by_dir_size.keys.each do |size|
+        if collection_by_dir_size[size].empty?
+          collection_by_dir_size.delete(size)
+        end
+      end
+
+      result = {
+        :collection_by_dir_size => collection_by_dir_size
+      }
+
+      # write the text file
+      File.open(output(:iddupe_dir), 'w') do |text_file|
+        text_file.write JSON.pretty_generate(result) + "\n"
+      end
+  
+      return result
+    end
+  end
+
+
   # scan a directory and all it's sub-directories (recursively)
   #
   # Consider this example directory tree:
@@ -401,7 +629,7 @@ class DirScanner < Worker
     content_hashes = []
     meta_hashes = []
 
-    Dir[File.join(base_path, '{*,.*}')].each do |full_path|
+    Dir[File.join(base_path, '{*,.*}')].sort.each do |full_path|  # sort is important for deterministic content hash for the entire dir
       pathinfo = PathInfo.new(full_path)
       name = Pathname.new(full_path).relative_path_from(base_path).to_s # .to_s converts from Pathname to actual string
       case name
