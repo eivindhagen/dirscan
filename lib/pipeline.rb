@@ -7,7 +7,7 @@ class Worker
   def required_inputs(*req_inputs)
     req_inputs.each do |req_input|
       unless @inputs.key?(req_input)
-        throw "Missing input '#{req_input}'"
+        raise ArgumentError, "Required input :#{req_input_file} is missing from @inputs"
       end
     end
   end
@@ -15,7 +15,28 @@ class Worker
   def required_outputs(*req_outputs)
     req_outputs.each do |req_output|
       unless @outputs.key?(req_output)
-        throw "Missing input '#{req_output}'"
+        raise ArgumentError, "Required output :#{req_output_file} is missing from @outputs"
+      end
+    end
+  end
+
+  def required_input_files(*req_input_files)
+    req_input_files.each do |req_input_file|
+      unless @inputs.key?(req_input_file)
+        raise ArgumentError, "Required input file :#{req_input_file} is missing from @inputs"
+      end
+      # input files should also exist
+      req_input_file_path = @inputs[req_input_file]
+      unless File.exist?(req_input_file_path)
+        raise ArgumentError, "Required input file :#{req_input_file} refers to path '#{req_input_file_path}' that does not exist"
+      end
+    end
+  end
+
+  def required_output_files(*req_output_files)
+    req_output_files.each do |req_output_file|
+      unless @outputs.key?(req_output_file)
+        raise ArgumentError, "Required output file :#{req_output_file} is missing from @outputs"
       end
     end
   end
@@ -25,7 +46,7 @@ class Worker
       return @inputs[sym]
     else
       return options[:default] if options.key?(:default)
-      throw "No input '#{sym}'"
+      raise ArgumentError, "No input :#{sym}"
     end
   end
 
@@ -34,7 +55,7 @@ class Worker
       return @outputs[sym]
     else
       return options[:default] if options.key?(:default)
-      throw "No output '#{sym}'"
+      raise ArgumentError, "No output :#{sym}"
     end
   end
 end
@@ -100,10 +121,17 @@ class Pipeline
     @config = pipeline_config
   end
 
+  def config_for_job(job)
+    unless @config[:jobs] && @config[:jobs][job]
+      raise ArgumentError, "The job :#{job} was not found in @config[:jobs]"
+    end
+    @config[:jobs][job]
+  end
+
   def run(job_class = Job)
     result = nil
     @config[:job_order].each do |job|
-      job = job_class.new(@config[:jobs][job])
+      job = job_class.new(config_for_job(job))
       result = job.run
     end
     return result
@@ -112,7 +140,7 @@ class Pipeline
   def simulate(job_class = Job)
     result = []
     @config[:job_order].each do |job|
-      job = job_class.new(@config[:jobs][job])
+      job = job_class.new(config_for_job(job))
       result << job.simulate
     end
     return result

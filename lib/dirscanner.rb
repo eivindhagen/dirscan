@@ -13,8 +13,8 @@ class DirScanner < Worker
 
   # perform a directory scan, by inspecting all files, symlinks and folders (recursively)
   def scan()
-    required_inputs :scan_root
-    required_outputs :scan_index
+    required_input_files :scan_root
+    required_output_files :scan_index
 
     timestamp = Time.now.to_i unless @timestamp
     
@@ -57,8 +57,8 @@ class DirScanner < Worker
   end
 
   def unpack()
-    required_inputs :scan_index
-    required_outputs :scan_unpack
+    required_input_files :scan_index
+    required_output_files :scan_unpack
 
     # read the index file
     IndexFile::Reader.new(input(:scan_index)) do |index_file|
@@ -74,7 +74,7 @@ class DirScanner < Worker
 
 
   def extract()
-    required_inputs :scan_index
+    required_input_files :scan_index
 
     result = {
       :dirscan => nil,
@@ -130,7 +130,7 @@ class DirScanner < Worker
 
 
   def verify()
-    required_inputs :scan_index
+    required_input_files :scan_index
 
     object_count = 0
     issues_count = 0
@@ -178,8 +178,8 @@ class DirScanner < Worker
 
 
   def analyze()
-    required_inputs :scan_index
-    required_outputs :analysis
+    required_input_files :scan_index
+    required_output_files :analysis
 
     # read the index file
     IndexFile::Reader.new(input(:scan_index)) do |index_file|
@@ -223,8 +223,8 @@ class DirScanner < Worker
   end
 
   def analysis_report
-    required_inputs :analysis
-    required_outputs :analysis_report
+    required_input_files :analysis
+    required_output_files :analysis_report
 
     analysis = File.open(input(:analysis)){|f| JSON.load(f)}
     file_sizes = analysis['file_sizes']
@@ -245,8 +245,8 @@ class DirScanner < Worker
   end
 
   def iddupe_files()
-    required_inputs :scan_index, :analysis
-    required_outputs :iddupe_files
+    required_input_files :scan_index, :analysis
+    required_output_files :iddupe_files
 
     # load up the analysis, so we know which file-sizes may have duplicates
     analysis = File.open(input(:analysis)){|f| JSON.load(f)}
@@ -330,8 +330,8 @@ class DirScanner < Worker
   end
 
   def iddupe_files_report
-    required_inputs :iddupe_files
-    required_outputs :iddupe_files_report
+    required_input_files :iddupe_files
+    required_output_files :iddupe_files_report
 
     iddupe_files = File.open(input(:iddupe_files)){|f| JSON.load(f)}
     collection_by_file_size = iddupe_files['collection_by_file_size']
@@ -370,8 +370,8 @@ class DirScanner < Worker
 
 
   def iddupe_dirs()
-    required_inputs :scan_index, :analysis, :iddupe_files
-    required_outputs :iddupe_dirs
+    required_input_files :scan_index, :analysis, :iddupe_files
+    required_output_files :iddupe_dirs
 
     # load up the analysis, so we know which dir-sizes may have duplicates
     analysis = File.open(input(:analysis)){|f| JSON.load(f)}

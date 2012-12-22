@@ -14,12 +14,18 @@ PHASE_1_PATH = "tmp/pipeline_test_phase1.txt"
 
 class MyWorker < Worker
   def generate
-    File.open(@outputs[:file_path], 'w'){|f| f.write PHASE_1_MSG}
+    required_input_files
+    required_output_files :file_path
+
+    File.open(output(:file_path), 'w'){|f| f.write PHASE_1_MSG}
   end
 
   def print
+    required_input_files :file_path
+    required_output_files
+
     msg = nil
-    File.open(@inputs[:file_path], 'r'){|f| msg = f.read}
+    File.open(input(:file_path), 'r'){|f| msg = f.read}
     return msg
   end
 end
@@ -59,45 +65,98 @@ class TestJob < Test::Unit::TestCase
 
     File.open(OUTPUT_PATH, 'w'){|f| f.write('test')}
     sim = job.simulate
-    assert_nil(sim, "When outout file exist, sim should do nothing")
+    assert_nil(sim, "When outout file exist, LazyJob.sim should do nothing")
   end
 end
 
 class TestPipeline < Test::Unit::TestCase
 
+  def generate_job_config
+    { # write a message to file_path
+      inputs: {},
+      outputs: {
+        file_path: PHASE_1_PATH,
+      },
+      worker: {
+        ruby_class: MyWorker,
+        ruby_method: :generate,
+      },
+    }
+  end
+
+  def print_job_config
+    { # print (and return) the contents of file_path
+      inputs: {
+        file_path: PHASE_1_PATH,
+      },
+      outputs: {
+      },
+      worker: {
+        ruby_class: MyWorker,
+        ruby_method: :print,
+      },
+    }
+  end
+
+
+  def pipeline_config_missing_job
+    { # a print job that relies on an input file, will raise exception when input file does not exist
+      jobs: {
+        generate: generate_job_config,
+      },
+      job_order: [:generate, :print], # :print job is not defined above, so should cause an error
+    }
+  end
+
+  def test_missing_job
+    pipeline = Pipeline.new(pipeline_config_missing_job)
+
+    assert_raise ArgumentError, "Should raise ArgumentError because the :print job is not defined in :jobs[]" do
+      result = pipeline.run
+    end
+  end
+     
+  def pipeline_config_missing_input_file
+    { # a print job that relies on an input file, will raise exception when input file does not exist
+      jobs: {
+        print: print_job_config,
+      },
+      job_order: [:print],
+    }
+  end
+
+  def test_missing_input_file
+    # remove input file, so we can test Exception handling
+    File.delete(PHASE_1_PATH) if File.exist?(PHASE_1_PATH)
+
+    pipeline = Pipeline.new(pipeline_config_missing_input_file)
+
+    assert_raise ArgumentError, "Should raise ArgumentError because the input file does not exist" do
+      result = pipeline.run
+    end
+  end
+     
   def pipeline_config_basic
     {
       jobs: {
-        generate: { # write a message to file_path
-          inputs: {},
-          outputs: {
-            file_path: PHASE_1_PATH,
-          },
-          worker: {
-            ruby_class: MyWorker,
-            ruby_method: :generate,
-          },
-        },
-        print: { # print (and return) the contents of file_path
-          inputs: {
-            file_path: PHASE_1_PATH,
-          },
-          outputs: {
-          },
-          worker: {
-            ruby_class: MyWorker,
-            ruby_method: :print,
-          },
-        },
+        generate: generate_job_config,
+        print: print_job_config,
       },
       job_order: [:generate, :print],
     }
   end
 
   def test_basic_run
+    # remove input file, in case an old copy was left behind
+    File.delete(PHASE_1_PATH) if File.exist?(PHASE_1_PATH)
+
     pipeline = Pipeline.new(pipeline_config_basic)
-    result = pipeline.run
-    assert_equal(PHASE_1_MSG, result)
+
+    assert_nothing_raised "pipeline.run should work fine" do
+      result = pipeline.run
+      assert_equal(PHASE_1_MSG, result)
+    end
+
     assert_file_contains(PHASE_1_MSG, PHASE_1_PATH)
     File.delete(PHASE_1_PATH)
   end
