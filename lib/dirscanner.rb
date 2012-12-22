@@ -458,7 +458,7 @@ class DirScanner < Worker
               dirs_ok = (active_dir[:dir_count] == dir[:recursive][:dir_count])
               files_ok = (active_dir[:file_count] == dir[:recursive][:file_count])
               if content_size_ok && symlinks_ok && dirs_ok && files_ok
-                puts "\nrecursive counts match"
+                # puts "\nrecursive counts match"
                 
                 # build hashes from all our symlinks/files/dirs
                 content_hashes = []
@@ -509,11 +509,11 @@ class DirScanner < Worker
 
 
               else
-                puts "\nrecursive counts mis-match"
-                puts "content_size_ok: #{content_size_ok}"
-                puts "symlinks_ok: #{symlinks_ok}"
-                puts "dirs_ok: #{dirs_ok}"
-                puts "files_ok: #{files_ok}"
+                # puts "\nrecursive counts mis-match"
+                # puts "content_size_ok: #{content_size_ok}"
+                # puts "symlinks_ok: #{symlinks_ok}"
+                # puts "dirs_ok: #{dirs_ok}"
+                # puts "files_ok: #{files_ok}"
               end
             end
 
