@@ -9,8 +9,8 @@ def create_pipeline(scan_root, dst_files_dir)
   scan_index = File.join dst_files_dir, "#{dirname}.dirscan"
   analysis = File.join dst_files_dir, "#{dirname}.dirscan.analysis"
   analysis_report = File.join dst_files_dir, "#{dirname}.dirscan.analysis.report"
-  iddupe = File.join dst_files_dir, "#{dirname}.dirscan.analysis.iddupe"
-  iddupe_report = File.join dst_files_dir, "#{dirname}.dirscan.analysis.iddupe.report"
+  iddupe_files = File.join dst_files_dir, "#{dirname}.dirscan.analysis.iddupe_files"
+  iddupe_files_report = File.join dst_files_dir, "#{dirname}.dirscan.analysis.iddupe_files.report"
 
   pipeline_config = {
     jobs: {
@@ -41,35 +41,35 @@ def create_pipeline(scan_root, dst_files_dir)
         }
       },
 
-      iddupe: { # positively identify duplicate files (within each group of same-size files)
+      iddupe_files: { # positively identify duplicate files (within each group of same-size files)
         inputs: {
           scan_index: scan_index,
           analysis: analysis,
         },
         outputs: {
-          iddupe: iddupe,
+          iddupe_files: iddupe_files,
         },
         worker: {
           ruby_class: :DirScanner,
-          ruby_method: :iddupe,
+          ruby_method: :iddupe_files,
         }
       },
 
-      iddupe_report: { # generate summary of duplicate files, including the number of redundant bytes or each file-size
+      iddupe_files_report: { # generate summary of duplicate files, including the number of redundant bytes or each file-size
         inputs: {
-          iddupe: iddupe,
+          iddupe_files: iddupe_files,
         },
         outputs: {
-          iddupe_report: iddupe_report,
+          iddupe_files_report: iddupe_files_report,
         },
         worker: {
           ruby_class: :DirScanner,
-          ruby_method: :iddupe_report,
+          ruby_method: :iddupe_files_report,
         }
       },
     },
 
-    job_order: [:scan, :analyze, :iddupe, :iddupe_report],
+    job_order: [:scan, :analyze, :iddupe_files, :iddupe_files_report],
   }
 
   return Pipeline.new(pipeline_config)

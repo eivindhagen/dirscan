@@ -244,9 +244,9 @@ class DirScanner < Worker
     return report
   end
 
-  def iddupe()
+  def iddupe_files()
     required_inputs :scan_index, :analysis
-    required_outputs :iddupe
+    required_outputs :iddupe_files
 
     # load up the analysis, so we know which file-sizes may have duplicates
     analysis = File.open(input(:analysis)){|f| JSON.load(f)}
@@ -321,7 +321,7 @@ class DirScanner < Worker
       }
 
       # write the text file
-      File.open(output(:iddupe), 'w') do |text_file|
+      File.open(output(:iddupe_files), 'w') do |text_file|
         text_file.write JSON.pretty_generate(result) + "\n"
       end
   
@@ -329,12 +329,12 @@ class DirScanner < Worker
     end
   end
 
-  def iddupe_report
-    required_inputs :iddupe
-    required_outputs :iddupe_report
+  def iddupe_files_report
+    required_inputs :iddupe_files
+    required_outputs :iddupe_files_report
 
-    iddupe = File.open(input(:iddupe)){|f| JSON.load(f)}
-    collection_by_file_size = iddupe['collection_by_file_size']
+    iddupe_files = File.open(input(:iddupe_files)){|f| JSON.load(f)}
+    collection_by_file_size = iddupe_files['collection_by_file_size']
     sorted_file_sizes = collection_by_file_size.keys.map{|key| key.to_i}.sort.reverse # largest files first
     total_redundant_files_count = 0
     total_redundant_size = 0
@@ -361,7 +361,7 @@ class DirScanner < Worker
     }
 
     # write the text file
-    File.open(output(:iddupe_report), 'w') do |text_file|
+    File.open(output(:iddupe_files_report), 'w') do |text_file|
       text_file.write JSON.pretty_generate(report) + "\n"
     end
 
@@ -369,19 +369,19 @@ class DirScanner < Worker
   end
 
 
-  def iddupe_dir()
-    required_inputs :scan_index, :analysis, :iddupe
-    required_outputs :iddupe_dir
+  def iddupe_dirs()
+    required_inputs :scan_index, :analysis, :iddupe_files
+    required_outputs :iddupe_dirs
 
     # load up the analysis, so we know which dir-sizes may have duplicates
     analysis = File.open(input(:analysis)){|f| JSON.load(f)}
     file_sizes = analysis['file_sizes']
     dir_sizes = analysis['dir_sizes']
 
-    # load up iddupe, so we know which file-sizes have duplicates, and the sha256 for all known duplicate files
-    iddupe = File.open(input(:iddupe)){|f| JSON.load(f)}
-    dupes_by_file_size = iddupe['dupes_by_file_size']
-    sha256_by_path = iddupe['sha256_by_path']
+    # load up iddupe_files, so we know which file-sizes have duplicates, and the sha256 for all known duplicate files
+    iddupe_files = File.open(input(:iddupe_files)){|f| JSON.load(f)}
+    dupes_by_file_size = iddupe_files['dupes_by_file_size']
+    sha256_by_path = iddupe_files['sha256_by_path']
 
     # create a list of dir-sizes that should be inspected more carefully
     collection_by_dir_size = {} # { dir_size => { content_hash => [path1, path2, ...]} }
@@ -574,7 +574,7 @@ class DirScanner < Worker
       }
 
       # write the text file
-      File.open(output(:iddupe_dir), 'w') do |text_file|
+      File.open(output(:iddupe_dirs), 'w') do |text_file|
         text_file.write JSON.pretty_generate(result) + "\n"
       end
   
