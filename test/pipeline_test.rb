@@ -17,7 +17,7 @@ class MyWorker < Worker
     required_input_files
     required_output_files :file_path
 
-    File.open(output(:file_path), 'w'){|f| f.write PHASE_1_MSG}
+    File.open(output_file(:file_path), 'w'){|f| f.write PHASE_1_MSG}
   end
 
   def print
@@ -25,7 +25,7 @@ class MyWorker < Worker
     required_output_files
 
     msg = nil
-    File.open(input(:file_path), 'r'){|f| msg = f.read}
+    File.open(input_file(:file_path), 'r'){|f| msg = f.read}
     return msg
   end
 end
@@ -37,10 +37,14 @@ class TestJob < Test::Unit::TestCase
   def job_config_basic
     {
       inputs: {
-        read: INPUT_PATH,
+        files: {
+          file_path: INPUT_PATH,
+        },
       },
       outputs: {
-        write: OUTPUT_PATH,
+        files: {
+          file_path: OUTPUT_PATH,
+        },
       },
       worker: {
         ruby_class: MyWorker,
@@ -51,8 +55,8 @@ class TestJob < Test::Unit::TestCase
 
   def test_job_create
     job = Job.new(job_config_basic)
-    assert_equal({read: INPUT_PATH}, job.inputs)
-    assert_equal({write: OUTPUT_PATH}, job.outputs)
+    assert_equal({files: {file_path: "tmp/input.txt"}}, job.inputs)
+    assert_equal({files: {file_path: "tmp/output.txt"}}, job.outputs)
     assert_equal(MyWorker, job.ruby_class)
     assert_equal(:generate, job.ruby_method)
   end
@@ -61,7 +65,11 @@ class TestJob < Test::Unit::TestCase
     job = LazyJob.new(job_config_basic)
     File.delete(OUTPUT_PATH) if File.exist?(OUTPUT_PATH)
     sim = job.simulate
-    assert_equal("MyWorker.new({:read=>\"tmp/input.txt\"}, {:write=>\"tmp/output.txt\"}).generate", sim, "When output files is missing, sim should generate it")
+    assert_equal(
+      "MyWorker.new({:files=>{:file_path=>\"tmp/input.txt\"}}, {:files=>{:file_path=>\"tmp/output.txt\"}}).generate",
+      sim,
+      "When output files is missing, sim should generate it"
+    )
 
     File.open(OUTPUT_PATH, 'w'){|f| f.write('test')}
     sim = job.simulate
@@ -75,7 +83,9 @@ class TestPipeline < Test::Unit::TestCase
     { # write a message to file_path
       inputs: {},
       outputs: {
-        file_path: PHASE_1_PATH,
+        files: {
+          file_path: PHASE_1_PATH,
+        },
       },
       worker: {
         ruby_class: MyWorker,
@@ -87,7 +97,9 @@ class TestPipeline < Test::Unit::TestCase
   def print_job_config
     { # print (and return) the contents of file_path
       inputs: {
-        file_path: PHASE_1_PATH,
+        files: {
+          file_path: PHASE_1_PATH,
+        },
       },
       outputs: {
       },
@@ -165,8 +177,8 @@ class TestPipeline < Test::Unit::TestCase
     pipeline = Pipeline.new(pipeline_config_basic)
     result = pipeline.simulate
     expected_sim = [ # NOTE: adding escaped new-line chars to match the output from simulate()
-      "MyWorker.new({}, {:file_path=>\"#{PHASE_1_PATH}\"}).generate",
-      "MyWorker.new({:file_path=>\"#{PHASE_1_PATH}\"}, {}).print",
+      "MyWorker.new({}, {:files=>{:file_path=>\"tmp/pipeline_test_phase1.txt\"}}).generate",
+      "MyWorker.new({:files=>{:file_path=>\"tmp/pipeline_test_phase1.txt\"}}, {}).print",
     ]
     assert_equal(expected_sim, result)
   end

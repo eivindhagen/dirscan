@@ -22,19 +22,19 @@ class TestDirScanner < Test::Unit::TestCase
   # full scan collects per-file content hashes, which is slow, but makes it easy to find exact duplicates later
   def test_onefile_full
     # scan
-    inputs = {:scan_root => 'test_data/one_file'}
-    outputs = {:scan_index => 'tmp/one_file.dirscan'}
+    inputs = {files: {scan_root: 'test_data/one_file'}}
+    outputs = {files: {scan_index: 'tmp/one_file.dirscan'}}
     ds = DirScanner.new(inputs, outputs)
     scan_result = ds.scan
 
     # unpack the scan
-    inputs = {:scan_index => 'tmp/one_file.dirscan'}
-    outputs = {:scan_unpack => 'tmp/one_file.json'}
+    inputs = {files: {scan_index: 'tmp/one_file.dirscan'}}
+    outputs = {files: {scan_unpack: 'tmp/one_file.json'}}
     ds = DirScanner.new(inputs, outputs)
     unpack_result = ds.unpack
 
     # extract the scan, verify attributes
-    inputs = {:scan_index => 'tmp/one_file.dirscan'}
+    inputs = {files: {scan_index: 'tmp/one_file.dirscan'}}
     outputs = {}
     ds = DirScanner.new(inputs, outputs)
     extract_result = ds.extract
@@ -93,7 +93,7 @@ class TestDirScanner < Test::Unit::TestCase
     end
 
     # verify the scan, there should be 0 issues
-    inputs = {:scan_index => 'tmp/one_file.dirscan'}
+    inputs = {files: {scan_index: 'tmp/one_file.dirscan'}}
     outputs = {}
     dv = DirScanner.new(inputs, outputs)
     verify_result = ds.verify
@@ -104,19 +104,19 @@ class TestDirScanner < Test::Unit::TestCase
   # in order to locate duplicates more efficiently
   def test_onefile_quick
     # scan
-    inputs = {:scan_root => 'test_data/one_file', :quick_scan => true}
-    outputs = {:scan_index => 'tmp/one_file_quick.dirscan'}
+    inputs = {files: {scan_root: 'test_data/one_file'}, values: {quick_scan: true}}
+    outputs = {files: {scan_index: 'tmp/one_file_quick.dirscan'}}
     ds = DirScanner.new(inputs, outputs)
     scan_result = ds.scan
 
     # unpack the scan
-    inputs = {:scan_index => 'tmp/one_file_quick.dirscan'}
-    outputs = {:scan_unpack => 'tmp/one_file_quick.json'}
+    inputs = {files: {scan_index: 'tmp/one_file_quick.dirscan'}}
+    outputs = {files: {scan_unpack: 'tmp/one_file_quick.json'}}
     ds = DirScanner.new(inputs, outputs)
     unpack_result = ds.unpack
 
     # extract the scan, verify attributes
-    inputs = {:scan_index => 'tmp/one_file_quick.dirscan'}
+    inputs = {files: {scan_index: 'tmp/one_file_quick.dirscan'}}
     outputs = {}
     ds = DirScanner.new(inputs, outputs)
     extract_result = ds.extract
@@ -160,29 +160,29 @@ class TestDirScanner < Test::Unit::TestCase
     end
 
     # verify the scan, there should be 0 issues
-    inputs = {:scan_index => 'tmp/one_file_quick.dirscan'}
+    inputs = {files: {scan_index: 'tmp/one_file_quick.dirscan'}}
     outputs = {}
     ds = DirScanner.new(inputs, outputs)
     verify_result = ds.verify
     assert_equal(0, verify_result[:issues_count])
 
     # analyze the scan
-    inputs = {:scan_index => 'tmp/one_file_quick.dirscan'}
-    outputs = {:analysis => 'tmp/one_file_quick.dirscan.analysis'}
+    inputs = {files: {scan_index: 'tmp/one_file_quick.dirscan'}}
+    outputs = {files: {analysis: 'tmp/one_file_quick.dirscan.analysis'}}
     ds = DirScanner.new(inputs, outputs)
     analysis_result = ds.analyze
     assert_equal({:file_sizes=>{3=>1}, :dir_sizes=>{3=>1}}, analysis_result)
 
     # analysis report
-    inputs = {:analysis => 'tmp/one_file_quick.dirscan.analysis'}
-    outputs = {:analysis_report => 'tmp/one_file_quick.dirscan.analysis.report'}
+    inputs = {files: {analysis: 'tmp/one_file_quick.dirscan.analysis'}}
+    outputs = {files: {analysis_report: 'tmp/one_file_quick.dirscan.analysis.report'}}
     ds = DirScanner.new(inputs, outputs)
     analysis_report = ds.analysis_report
     assert_equal({:sorted_by_count=>[[3, 1]]}, analysis_report)
 
     # iddupe_files - uses analysis to find exact duplicate files
-    inputs = {:scan_index => 'tmp/one_file_quick.dirscan', :analysis => 'tmp/one_file_quick.dirscan.analysis'}
-    outputs = {:iddupe_files => 'tmp/one_file_quick.dirscan.analysis.iddupe_files'}
+    inputs = {files: {scan_index: 'tmp/one_file_quick.dirscan', :analysis => 'tmp/one_file_quick.dirscan.analysis'}}
+    outputs = {files: {iddupe_files: 'tmp/one_file_quick.dirscan.analysis.iddupe_files'}}
     ds = DirScanner.new(inputs, outputs)
     iddupe_files_result = ds.iddupe_files
     assert_equal({:collection_by_file_size=>{}, :sha256_by_path=>{}}, iddupe_files_result, "there should be no dupes")
@@ -192,40 +192,40 @@ class TestDirScanner < Test::Unit::TestCase
   # in order to locate duplicates more efficiently
   def test_dupes_quick
     # scan
-    inputs = {:scan_root => 'test_data/nested1_mixed', :quick_scan => true}
-    outputs = {:scan_index => 'tmp/nested1_mixed.dirscan'}
+    inputs = {files: {:scan_root => 'test_data/nested1_mixed'}, values: {:quick_scan => true}}
+    outputs = {files: {:scan_index => 'tmp/nested1_mixed.dirscan'}}
     ds = DirScanner.new(inputs, outputs)
     scan_result = ds.scan
 
     # unpack the scan
-    inputs = {:scan_index => 'tmp/nested1_mixed.dirscan'}
-    outputs = {:scan_unpack => 'tmp/nested1_mixed.json'}
+    inputs = {files: {:scan_index => 'tmp/nested1_mixed.dirscan'}}
+    outputs = {files: {:scan_unpack => 'tmp/nested1_mixed.json'}}
     ds = DirScanner.new(inputs, outputs)
     unpack_result = ds.unpack
 
     # extract the scan, verify attributes
-    inputs = {:scan_index => 'tmp/nested1_mixed.dirscan'}
+    inputs = {files: {:scan_index => 'tmp/nested1_mixed.dirscan'}}
     outputs = {}
     ds = DirScanner.new(inputs, outputs)
     extract_result = ds.extract
 
     # analyze the scan
-    inputs = {:scan_index => 'tmp/nested1_mixed.dirscan'}
-    outputs = {:analysis => 'tmp/nested1_mixed.dirscan.analysis'}
+    inputs = {files: {:scan_index => 'tmp/nested1_mixed.dirscan'}}
+    outputs = {files: {:analysis => 'tmp/nested1_mixed.dirscan.analysis'}}
     ds = DirScanner.new(inputs, outputs)
     analysis_result = ds.analyze
     assert_equal({:file_sizes=>{0=>4, 5=>2, 12=>3, 50=>3}, :dir_sizes=>{0=>1, 5=>2, 62=>3, 196=>1}}, analysis_result)
 
     # analysis report
-    inputs = {:analysis => 'tmp/nested1_mixed.dirscan.analysis'}
-    outputs = {:analysis_report => 'tmp/nested1_mixed.dirscan.analysis.report'}
+    inputs = {files: {:analysis => 'tmp/nested1_mixed.dirscan.analysis'}}
+    outputs = {files: {:analysis_report => 'tmp/nested1_mixed.dirscan.analysis.report'}}
     ds = DirScanner.new(inputs, outputs)
     analysis_report = ds.analysis_report
     assert_equal({:sorted_by_count=>[[0, 4], [12, 3], [50, 3], [5, 2]]}, analysis_report)
 
     # iddupe_files - uses analysis to find exact duplicate files
-    inputs = {:scan_index => 'tmp/nested1_mixed.dirscan', :analysis => 'tmp/nested1_mixed.dirscan.analysis'}
-    outputs = {:iddupe_files => 'tmp/nested1_mixed.dirscan.analysis.iddupe_files'}
+    inputs = {files: {:scan_index => 'tmp/nested1_mixed.dirscan', :analysis => 'tmp/nested1_mixed.dirscan.analysis'}}
+    outputs = {files: {:iddupe_files => 'tmp/nested1_mixed.dirscan.analysis.iddupe_files'}}
     ds = DirScanner.new(inputs, outputs)
     iddupe_files_result = ds.iddupe_files
     assert_equal(
@@ -257,8 +257,8 @@ class TestDirScanner < Test::Unit::TestCase
     )
 
     # iddupe_files report - creates a summary from the iddupe_files result, showing the number of redundant bytes for each file-size
-    inputs = {:iddupe_files => 'tmp/nested1_mixed.dirscan.analysis.iddupe_files'}
-    outputs = {:iddupe_files_report => 'tmp/nested1_mixed.dirscan.analysis.iddupe_files.json'}
+    inputs = {files: {:iddupe_files => 'tmp/nested1_mixed.dirscan.analysis.iddupe_files'}}
+    outputs = {files: {:iddupe_files_report => 'tmp/nested1_mixed.dirscan.analysis.iddupe_files.json'}}
     ds = DirScanner.new(inputs, outputs)
     iddupe_files_report = ds.iddupe_files_report
     assert_equal(
@@ -273,8 +273,8 @@ class TestDirScanner < Test::Unit::TestCase
     )
 
     # iddupe_dirs - uses iddupe_files to find duplicate dir's
-    inputs = {:scan_index => 'tmp/nested1_mixed.dirscan', :analysis => 'tmp/nested1_mixed.dirscan.analysis', :iddupe_files => 'tmp/nested1_mixed.dirscan.analysis.iddupe_files'}
-    outputs = {:iddupe_dirs => 'tmp/nested1_mixed.dirscan.analysis.iddupe_dirs'}
+    inputs = {files: {:scan_index => 'tmp/nested1_mixed.dirscan', :analysis => 'tmp/nested1_mixed.dirscan.analysis', :iddupe_files => 'tmp/nested1_mixed.dirscan.analysis.iddupe_files'}}
+    outputs = {files: {:iddupe_dirs => 'tmp/nested1_mixed.dirscan.analysis.iddupe_dirs'}}
     ds = DirScanner.new(inputs, outputs)
     result = ds.iddupe_dirs
     assert_equal(

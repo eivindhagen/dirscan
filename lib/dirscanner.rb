@@ -25,15 +25,15 @@ class DirScanner < Worker
     scan_info = {
       :type => :dirscan,
       :host_name => Socket.gethostname,
-      :scan_root => input(:scan_root),
-      :scan_root_real => Pathname.new(input(:scan_root)).realpath,  # turn scan_root into the canonical form, making it absolute, with no symlinks
+      :scan_root => input_file(:scan_root),
+      :scan_root_real => Pathname.new(input_file(:scan_root)).realpath,  # turn scan_root into the canonical form, making it absolute, with no symlinks
       :timestamp => timestamp,
-      :index_path => output(:scan_index),
-      :verbose => input(:verbose, :default => false),
+      :index_path => output_file(:scan_index),
+      :verbose => input_value(:verbose, :default => false),
     }
 
     # templates specify how to create the hash source strings for various dir entry types
-    if input(:quick_scan, :default => false)
+    if input_value(:quick_scan, :default => false)
       # quick scan does not need hash templates
       scan_info[:quick] = true
     else
@@ -45,12 +45,12 @@ class DirScanner < Worker
     end
 
     # create the index file, and perform the scan
-    IndexFile::Writer.new(output(:scan_index)) do |index_file|
+    IndexFile::Writer.new(output_file(:scan_index)) do |index_file|
       # write dirscan meta-data
       index_file.write_object(scan_info)
 
       # scan recursively
-      @scan_result = scan_recursive(index_file, scan_info, input(:scan_root))
+      @scan_result = scan_recursive(index_file, scan_info, input_file(:scan_root))
     end
 
     return @scan_result
@@ -61,12 +61,12 @@ class DirScanner < Worker
     required_output_files :scan_unpack
 
     # read the index file
-    IndexFile::Reader.new(input(:scan_index)) do |index_file|
+    IndexFile::Reader.new(input_file(:scan_index)) do |index_file|
       # write the text file
-      File.open(output(:scan_unpack), 'w') do |unpack_file|
+      File.open(output_file(:scan_unpack), 'w') do |unpack_file|
         while not index_file.eof? do
           object = index_file.read_object
-          unpack_file.write JSON.pretty_generate(object) + "\n"
+          unpack_file.write(JSON.pretty_generate(object) + "\n")
         end
       end
     end
@@ -83,7 +83,7 @@ class DirScanner < Worker
     object_count = 0
 
     # read the index file
-    IndexFile::Reader.new(input(:scan_index)) do |index_file|
+    IndexFile::Reader.new(input_file(:scan_index)) do |index_file|
       # state objects, updated during parsing
       dir = nil
 
@@ -136,7 +136,7 @@ class DirScanner < Worker
     issues_count = 0
 
     # read the index file
-    IndexFile::Reader.new(input(:scan_index)) do |index_file|
+    IndexFile::Reader.new(input_file(:scan_index)) do |index_file|
       # state objects, updated during parsing
       dirscan = {}
       dir = {}
@@ -182,7 +182,7 @@ class DirScanner < Worker
     required_output_files :analysis
 
     # read the index file
-    IndexFile::Reader.new(input(:scan_index)) do |index_file|
+    IndexFile::Reader.new(input_file(:scan_index)) do |index_file|
       # analysis object
       file_sizes = {}
       dir_sizes = {}
@@ -214,7 +214,7 @@ class DirScanner < Worker
       }
 
       # write the text file
-      File.open(output(:analysis), 'w') do |text_file|
+      File.open(output_file(:analysis), 'w') do |text_file|
         text_file.write JSON.pretty_generate(analysis) + "\n"
       end
   
@@ -226,7 +226,7 @@ class DirScanner < Worker
     required_input_files :analysis
     required_output_files :analysis_report
 
-    analysis = File.open(input(:analysis)){|f| JSON.load(f)}
+    analysis = File.open(input_file(:analysis)){|f| JSON.load(f)}
     file_sizes = analysis['file_sizes']
     sorted_file_sizes = file_sizes.keys.map{|key| key.to_i}.sort
     sizes_with_counts = sorted_file_sizes.map{|size| [size, file_sizes["#{size}"]]}
@@ -237,7 +237,7 @@ class DirScanner < Worker
     }
 
     # write the text file
-    File.open(output(:analysis_report), 'w') do |text_file|
+    File.open(output_file(:analysis_report), 'w') do |text_file|
       text_file.write JSON.pretty_generate(report) + "\n"
     end
 
@@ -249,7 +249,7 @@ class DirScanner < Worker
     required_output_files :iddupe_files
 
     # load up the analysis, so we know which file-sizes may have duplicates
-    analysis = File.open(input(:analysis)){|f| JSON.load(f)}
+    analysis = File.open(input_file(:analysis)){|f| JSON.load(f)}
     file_sizes = analysis['file_sizes']
 
     # create a list of file sizes that should be inspected more carefully
@@ -265,7 +265,7 @@ class DirScanner < Worker
 
 
     # read the index file
-    IndexFile::Reader.new(input(:scan_index)) do |index_file|
+    IndexFile::Reader.new(input_file(:scan_index)) do |index_file|
       # state objects, updated during parsing
       dirscan = {}
       dir = {}
@@ -321,7 +321,7 @@ class DirScanner < Worker
       }
 
       # write the text file
-      File.open(output(:iddupe_files), 'w') do |text_file|
+      File.open(output_file(:iddupe_files), 'w') do |text_file|
         text_file.write JSON.pretty_generate(result) + "\n"
       end
   
@@ -333,7 +333,7 @@ class DirScanner < Worker
     required_input_files :iddupe_files
     required_output_files :iddupe_files_report
 
-    iddupe_files = File.open(input(:iddupe_files)){|f| JSON.load(f)}
+    iddupe_files = File.open(input_file(:iddupe_files)){|f| JSON.load(f)}
     collection_by_file_size = iddupe_files['collection_by_file_size']
     sorted_file_sizes = collection_by_file_size.keys.map{|key| key.to_i}.sort.reverse # largest files first
     total_redundant_files_count = 0
@@ -361,7 +361,7 @@ class DirScanner < Worker
     }
 
     # write the text file
-    File.open(output(:iddupe_files_report), 'w') do |text_file|
+    File.open(output_file(:iddupe_files_report), 'w') do |text_file|
       text_file.write JSON.pretty_generate(report) + "\n"
     end
 
@@ -374,12 +374,12 @@ class DirScanner < Worker
     required_output_files :iddupe_dirs
 
     # load up the analysis, so we know which dir-sizes may have duplicates
-    analysis = File.open(input(:analysis)){|f| JSON.load(f)}
+    analysis = File.open(input_file(:analysis)){|f| JSON.load(f)}
     file_sizes = analysis['file_sizes']
     dir_sizes = analysis['dir_sizes']
 
     # load up iddupe_files, so we know which file-sizes have duplicates, and the sha256 for all known duplicate files
-    iddupe_files = File.open(input(:iddupe_files)){|f| JSON.load(f)}
+    iddupe_files = File.open(input_file(:iddupe_files)){|f| JSON.load(f)}
     dupes_by_file_size = iddupe_files['dupes_by_file_size']
     sha256_by_path = iddupe_files['sha256_by_path']
 
@@ -399,7 +399,7 @@ class DirScanner < Worker
     dir_hash_template      = 'name+mode+owner+group+mtime+content_size+content_hash+meta_hash'.freeze,  # size/hash of dir's content
 
     # read the index file
-    IndexFile::Reader.new(input(:scan_index)) do |index_file|
+    IndexFile::Reader.new(input_file(:scan_index)) do |index_file|
       # state objects, updated during parsing
       dirscan = nil
       dir = nil
@@ -574,7 +574,7 @@ class DirScanner < Worker
       }
 
       # write the text file
-      File.open(output(:iddupe_dirs), 'w') do |text_file|
+      File.open(output_file(:iddupe_dirs), 'w') do |text_file|
         text_file.write JSON.pretty_generate(result) + "\n"
       end
   
