@@ -1,3 +1,5 @@
+require File.join(File.dirname(__FILE__), 'pathinfo')
+
 class Object
   def blank?
     respond_to?(:empty?) ? empty? : !self
@@ -124,7 +126,7 @@ class Worker
 end
 
 
-class Job
+class Job # A Job holds the configuration needed to create a Worker that can run (or simulate)
   def initialize(job_config)
     @config = job_config
   end
@@ -132,9 +134,21 @@ class Job
   def inputs
     @config[:inputs]
   end
+  def input_files
+    @config[:inputs][:files]
+  end
+  def input_values
+    @config[:inputs][:values]
+  end
 
   def outputs
     @config[:outputs]
+  end
+  def output_files
+    @config[:outputs][:files]
+  end
+  def output_values
+    @config[:outputs][:values]
   end
 
   def ruby_class
@@ -159,45 +173,51 @@ end
 
 
 class LazyJob < Job # will not run the job if the output file(s) already exist
-  def run
-    outputs[:files].each do |output_key, output_value|
-      unless File.exist?(output_value)
-        return super
+  def output_files_exist?
+    outputs[:files].each do |file_key, file_path|
+      unless File.exist?(file_path)
+        return false
       end
     end
-    return nil
+    return true
+  end
+
+  def output_stale?
+    return true unless output_files_exist?
+  end
+
+  def run
+    output_stale? ? super : nil
   end
 
   def simulate
-    outputs[:files].each do |output_key, output_value|
-      unless File.exist?(output_value)
-        return super
-      end
-    end
-    return nil
+    output_stale? ? super : nil
   end
 end
 
 
-# class DependencyJob < Job # will not run the job the output file(s) are newer than the input file(s)
-#   def run
-#     outputs.each do |output_key, output_value|
-#       unless File.exist?(output_value)
-#         return super
-#       end
-#     end
-#     return nil
-#   end
+class DependencyJob < LazyJob # will not run the job the output file(s) are newer than the input file(s)
+  def modify_times_for_files(files) # files = hash{name: path, ...}
+    modify_times = {} # create a hash that mirrors the files hash (method argument)
+    files.each do |file_key, file_path|
+      modify_times[file_key] = PathInfo.new(file_path).modify_time
+    end
+    return modify_times
+  end
 
-#   def simulate
-#     outputs.each do |output_key, output_value|
-#       unless File.exist?(output_value)
-#         return super
-#       end
-#     end
-#     return nil
-#   end
-# end
+  def output_stale?
+    return true unless output_files_exist?
+
+    input_modify_times = modify_times_for_files(input_files)
+    output_modify_times = modify_times_for_files(output_files)
+    puts "input files: #{input_modify_times.to_yaml}"
+    puts "output files: #{output_modify_times.to_yaml}"
+    input_modify_times.values.max >= output_modify_times.values.min # true if newest input file is newer than oldest output file
+  end
+
+  # run() is properly implemented in the super-class
+  # simulate() is properly implemented in the super-class
+end
 
 
 class Pipeline

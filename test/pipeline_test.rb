@@ -20,6 +20,17 @@ class MyWorker < Worker
     File.open(output_file(:file_path), 'w'){|f| f.write PHASE_1_MSG}
   end
 
+  def upcase
+    required_input_files :file_path
+    required_output_files :file_path
+
+    text = File.open(input_file(:file_path)){|f| f.read}
+    new_text = text.upcase
+    File.open(output_file(:file_path), 'w'){|f| f.write new_text}
+
+    return new_text
+  end
+
   def print
     required_input_files :file_path
     required_output_files
@@ -48,7 +59,7 @@ class TestJob < Test::Unit::TestCase
       },
       worker: {
         ruby_class: MyWorker,
-        ruby_method: :generate,
+        ruby_method: :upcase,
       },
     }
   end
@@ -58,7 +69,7 @@ class TestJob < Test::Unit::TestCase
     assert_equal({files: {file_path: "tmp/input.txt"}}, job.inputs)
     assert_equal({files: {file_path: "tmp/output.txt"}}, job.outputs)
     assert_equal(MyWorker, job.ruby_class)
-    assert_equal(:generate, job.ruby_method)
+    assert_equal(:upcase, job.ruby_method)
   end
 
   def test_job_lazy
@@ -66,7 +77,7 @@ class TestJob < Test::Unit::TestCase
     File.delete(OUTPUT_PATH) if File.exist?(OUTPUT_PATH)
     sim = job.simulate
     assert_equal(
-      "MyWorker.new({:files=>{:file_path=>\"tmp/input.txt\"}}, {:files=>{:file_path=>\"tmp/output.txt\"}}).generate",
+      "MyWorker.new({:files=>{:file_path=>\"tmp/input.txt\"}}, {:files=>{:file_path=>\"tmp/output.txt\"}}).upcase",
       sim,
       "When output files is missing, sim should generate it"
     )
@@ -74,6 +85,35 @@ class TestJob < Test::Unit::TestCase
     File.open(OUTPUT_PATH, 'w'){|f| f.write('test')}
     sim = job.simulate
     assert_nil(sim, "When outout file exist, LazyJob.sim should do nothing")
+  end
+
+  def test_job_dependency
+    job = DependencyJob.new(job_config_basic)
+    File.open(INPUT_PATH, 'w'){|f| f.write('sample input file text')}
+
+    File.delete(OUTPUT_PATH) if File.exist?(OUTPUT_PATH)
+    sim = job.simulate
+    assert_equal(
+      "MyWorker.new({:files=>{:file_path=>\"tmp/input.txt\"}}, {:files=>{:file_path=>\"tmp/output.txt\"}}).upcase",
+      sim,
+      "When output files is missing, sim should generate it"
+    )
+
+    File.open(OUTPUT_PATH, 'w'){|f| f.write('sample output file text')}
+    # set output file modify time to 10 seconds ago, so it's older than the input file
+    PathInfo.new(OUTPUT_PATH).set_modify_time(Time.now.to_i - 10)
+    sim = job.simulate
+    assert_equal(
+      "MyWorker.new({:files=>{:file_path=>\"tmp/input.txt\"}}, {:files=>{:file_path=>\"tmp/output.txt\"}}).upcase",
+      sim,
+      "When output file exist and is newer then input file, DependencyJob.sim should do nothing"
+    )
+
+    File.open(OUTPUT_PATH, 'w'){|f| f.write('sample output file text')}
+    # set input file modify time to 10 seconds ago, so it's older than the output file
+    PathInfo.new(INPUT_PATH).set_modify_time(Time.now.to_i - 10)
+    sim = job.simulate
+    assert_nil(sim, "When output file exist and is newer then input file, DependencyJob.sim should do nothing")
   end
 end
 
