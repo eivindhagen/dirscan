@@ -246,7 +246,7 @@ class DirScanner < Worker
 
   def iddupe_files()
     required_input_files :scan_index, :analysis
-    required_output_files :iddupe_files
+    required_output_files :iddupe_files, :sha256_cache
 
     # load up the analysis, so we know which file-sizes may have duplicates
     analysis = File.open(input_file(:analysis)){|f| JSON.load(f)}
@@ -317,12 +317,20 @@ class DirScanner < Worker
 
       result = {
         :collection_by_file_size => collection_by_file_size,
-        :sha256_by_path => sha256_by_path,
       }
 
       # write the text file
       File.open(output_file(:iddupe_files), 'w') do |text_file|
         text_file.write JSON.pretty_generate(result) + "\n"
+      end
+
+      if output_file(:sha256_cache, {default: nil})
+        cache_data = {
+          :sha256_by_path => sha256_by_path,
+        }
+        File.open(output_file(:sha256_cache), 'w') do |cache_file|
+          cache_file.write JSON.pretty_generate(cache_data)
+        end
       end
   
       return result
@@ -370,18 +378,21 @@ class DirScanner < Worker
 
 
   def iddupe_dirs()
-    required_input_files :scan_index, :analysis, :iddupe_files
+    required_input_files :scan_index, :analysis, :iddupe_files, :sha256_cache
     required_output_files :iddupe_dirs
 
-    # load up the analysis, so we know which dir-sizes may have duplicates
+    # load the analysis, so we know which dir-sizes may have duplicates
     analysis = File.open(input_file(:analysis)){|f| JSON.load(f)}
     file_sizes = analysis['file_sizes']
     dir_sizes = analysis['dir_sizes']
 
-    # load up iddupe_files, so we know which file-sizes have duplicates, and the sha256 for all known duplicate files
+    # load iddupe_files, so we know which file-sizes have duplicates
     iddupe_files = File.open(input_file(:iddupe_files)){|f| JSON.load(f)}
     dupes_by_file_size = iddupe_files['dupes_by_file_size']
-    sha256_by_path = iddupe_files['sha256_by_path']
+
+    # load sha256_cache, sha256 for all known duplicate files
+    sha256_cache = File.open(input_file(:sha256_cache)){|f| JSON.load(f)}
+    sha256_by_path = sha256_cache['sha256_by_path']
 
     # create a list of dir-sizes that should be inspected more carefully
     collection_by_dir_size = {} # { dir_size => { content_hash => [path1, path2, ...]} }

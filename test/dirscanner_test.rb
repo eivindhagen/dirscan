@@ -5,6 +5,9 @@
 require "test/unit"
 require 'redgreen'
 
+#include helper classes
+require File.expand_path('../lib/assert_json_file_contains.rb', File.dirname(__FILE__))
+
 #include the classes we are testing
 require File.expand_path('../lib/dirscanner.rb', File.dirname(__FILE__))
 
@@ -181,11 +184,21 @@ class TestDirScanner < Test::Unit::TestCase
     assert_equal({:sorted_by_count=>[[3, 1]]}, analysis_report)
 
     # iddupe_files - uses analysis to find exact duplicate files
-    inputs = {files: {scan_index: 'tmp/one_file_quick.dirscan', :analysis => 'tmp/one_file_quick.dirscan.analysis'}}
-    outputs = {files: {iddupe_files: 'tmp/one_file_quick.dirscan.analysis.iddupe_files'}}
+    inputs = {
+      files: {
+        scan_index: 'tmp/one_file_quick.dirscan',
+        :analysis => 'tmp/one_file_quick.dirscan.analysis',
+      }
+    }
+    outputs = {
+      files: {
+        iddupe_files: 'tmp/one_file_quick.dirscan.analysis.iddupe_files',
+        sha256_cache: 'tmp/one_file_quick.dirscan.sha256_cache',
+      }
+    }
     ds = DirScanner.new(inputs, outputs)
     iddupe_files_result = ds.iddupe_files
-    assert_equal({:collection_by_file_size=>{}, :sha256_by_path=>{}}, iddupe_files_result, "there should be no dupes")
+    assert_equal({:collection_by_file_size=>{}}, iddupe_files_result, "there should be no dupes")
   end
 
   # quick scan omits the per-file content hashes, instead the laters processes will hash same-size files
@@ -224,36 +237,51 @@ class TestDirScanner < Test::Unit::TestCase
     assert_equal({:sorted_by_count=>[[0, 4], [12, 3], [50, 3], [5, 2]]}, analysis_report)
 
     # iddupe_files - uses analysis to find exact duplicate files
-    inputs = {files: {:scan_index => 'tmp/nested1_mixed.dirscan', :analysis => 'tmp/nested1_mixed.dirscan.analysis'}}
-    outputs = {files: {:iddupe_files => 'tmp/nested1_mixed.dirscan.analysis.iddupe_files'}}
+    inputs = {
+      files: {
+        scan_index: 'tmp/nested1_mixed.dirscan',
+        analysis: 'tmp/nested1_mixed.dirscan.analysis'
+      }
+    }
+    outputs = {
+      files: {
+        iddupe_files: 'tmp/nested1_mixed.dirscan.analysis.iddupe_files',
+        sha256_cache: 'tmp/nested1_mixed.dirscan.sha256_cache',
+      }
+    }
     ds = DirScanner.new(inputs, outputs)
     iddupe_files_result = ds.iddupe_files
     assert_equal(
-      {:collection_by_file_size=>{
-        12=>
+      {collection_by_file_size: {
+        12 =>
           {"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"=>
             ["test_data/nested1_mixed/dir1/file1",
              "test_data/nested1_mixed/dir2/file1"]
           },
-        50=>
+        50 =>
           {"9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5"=>
             ["test_data/nested1_mixed/dir1/story",
              "test_data/nested1_mixed/dir2/story",
              "test_data/nested1_mixed/dir3/story"]
           }
         },
-        :sha256_by_path=>{
-          "test_data/nested1_mixed/dir1/file1"=>"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
-          "test_data/nested1_mixed/dir1/story"=>"9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5",
-          "test_data/nested1_mixed/dir2/file1"=>"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
-          "test_data/nested1_mixed/dir2/story"=>"9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5",
-          "test_data/nested1_mixed/dir3/file3"=>"d9a4c6676a62cb3b8ca0b8459ab341837cdba8543316c8574b454ccc24d4c690",
-          "test_data/nested1_mixed/dir3/story"=>"9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5",
-          "test_data/nested1_mixed/dir4/file4"=>"ab929fcd5594037960792ea0b98caf5fdaf6b60645e4ef248c28db74260f393e",
-          "test_data/nested1_mixed/dir5/file5"=>"ac169f9fb7cb48d431466d7b3bf2dc3e1d2e7ad6630f6b767a1ac1801c496b35",
-        },
       },
       iddupe_files_result,
+    )
+    assert_json_file_contains(
+      {
+        sha256_by_path: {
+          "test_data/nested1_mixed/dir1/file1" => "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+          "test_data/nested1_mixed/dir1/story" => "9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5",
+          "test_data/nested1_mixed/dir2/file1" => "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+          "test_data/nested1_mixed/dir2/story" => "9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5",
+          "test_data/nested1_mixed/dir3/file3" => "d9a4c6676a62cb3b8ca0b8459ab341837cdba8543316c8574b454ccc24d4c690",
+          "test_data/nested1_mixed/dir3/story" => "9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5",
+          "test_data/nested1_mixed/dir4/file4" => "ab929fcd5594037960792ea0b98caf5fdaf6b60645e4ef248c28db74260f393e",
+          "test_data/nested1_mixed/dir5/file5" => "ac169f9fb7cb48d431466d7b3bf2dc3e1d2e7ad6630f6b767a1ac1801c496b35",
+        },
+      },
+      'tmp/nested1_mixed.dirscan.sha256_cache'
     )
 
     # iddupe_files report - creates a summary from the iddupe_files result, showing the number of redundant bytes for each file-size
@@ -264,8 +292,8 @@ class TestDirScanner < Test::Unit::TestCase
     assert_equal(
       {
         :dupes_by_file_size=>[
-          [50, 100, {"9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5"=>["test_data/nested1_mixed/dir1/story", "test_data/nested1_mixed/dir2/story", "test_data/nested1_mixed/dir3/story"]}],
-          [12, 12, {"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"=>["test_data/nested1_mixed/dir1/file1", "test_data/nested1_mixed/dir2/file1"]}]
+          [50, 100, {"9b8728603c656ce16230326e3ca3849e963e1fd13b75f1fede3334eec1568df5" => ["test_data/nested1_mixed/dir1/story", "test_data/nested1_mixed/dir2/story", "test_data/nested1_mixed/dir3/story"]}],
+          [12, 12, {"a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447" => ["test_data/nested1_mixed/dir1/file1", "test_data/nested1_mixed/dir2/file1"]}]
         ],
         :summary=>{:total_redundant_files_count=>3, :total_redundant_size=>112}
       },
@@ -273,8 +301,19 @@ class TestDirScanner < Test::Unit::TestCase
     )
 
     # iddupe_dirs - uses iddupe_files to find duplicate dir's
-    inputs = {files: {:scan_index => 'tmp/nested1_mixed.dirscan', :analysis => 'tmp/nested1_mixed.dirscan.analysis', :iddupe_files => 'tmp/nested1_mixed.dirscan.analysis.iddupe_files'}}
-    outputs = {files: {:iddupe_dirs => 'tmp/nested1_mixed.dirscan.analysis.iddupe_dirs'}}
+    inputs = {
+      files: {
+        :scan_index => 'tmp/nested1_mixed.dirscan',
+        :analysis => 'tmp/nested1_mixed.dirscan.analysis',
+        :iddupe_files => 'tmp/nested1_mixed.dirscan.analysis.iddupe_files',
+        :sha256_cache => 'tmp/nested1_mixed.dirscan.sha256_cache',
+      }
+    }
+    outputs = {
+      files: {
+        :iddupe_dirs => 'tmp/nested1_mixed.dirscan.analysis.iddupe_dirs'
+      }
+    }
     ds = DirScanner.new(inputs, outputs)
     result = ds.iddupe_dirs
     assert_equal(
