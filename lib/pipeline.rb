@@ -1,3 +1,5 @@
+require 'yaml'
+
 require File.join(File.dirname(__FILE__), 'pathinfo')
 
 class Object
