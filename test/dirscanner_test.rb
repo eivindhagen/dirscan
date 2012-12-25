@@ -1,9 +1,5 @@
-# unit_tests.rb
-#
-# http://en.wikibooks.org/wiki/Ruby_Programming/Unit_testing
-#
-require "test/unit"
-require 'redgreen'
+#include the test helper
+require File.expand_path('test_helper.rb', File.dirname(__FILE__))
 
 #include helper classes
 require File.expand_path('../lib/assert_json_file_contains.rb', File.dirname(__FILE__))

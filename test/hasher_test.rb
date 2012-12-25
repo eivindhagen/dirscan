@@ -1,9 +1,5 @@
-# unit_tests.rb
-#
-# http://en.wikibooks.org/wiki/Ruby_Programming/Unit_testing
-#
-require "test/unit"
-require 'redgreen'
+#include the test helper
+require File.expand_path('test_helper.rb', File.dirname(__FILE__))
 
 #include the classes we are testing
 require File.expand_path('../lib/hasher.rb', File.dirname(__FILE__))
@@ -39,7 +35,6 @@ class TestHasher < Test::Unit::TestCase
   end
  
   def test_hasher_abc
-
     info = {
       :a => 'A',
       :b => 'BB',

@@ -17,7 +17,13 @@ group :development do
   gem 'guard-bundler', '0.1.3'
 	# guard can figure out when to do things based on which files change
   gem 'guard-test', '0.4.3'
+  # notify using the terminal window's title (name)
+  gem 'terminal-notifier-guard'
 
   # colors for Test::Unit
   gem 'mynyml-redgreen'
+
+  gem 'simplecov'
+
+  gem 'rake'
 end

@@ -1,13 +1,11 @@
-# unit_tests.rb
-#
-# http://en.wikibooks.org/wiki/Ruby_Programming/Unit_testing
-#
-require "test/unit"
-require 'redgreen'
+#include helper classes
+require File.expand_path('../lib/assert_file_contains.rb', File.dirname(__FILE__))
+
+#include the test helper
+require File.expand_path('test_helper.rb', File.dirname(__FILE__))
 
 #include the classes we are testing
 require File.expand_path('../lib/pipeline.rb', File.dirname(__FILE__))
-require File.expand_path('../lib/assert_file_contains.rb', File.dirname(__FILE__))
 
 PHASE_1_MSG = "This is phase 1 of the test."
 PHASE_1_PATH = "tmp/pipeline_test_phase1.txt"
