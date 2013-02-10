@@ -95,10 +95,6 @@ def create_pipeline(scan_root, dst_files_dir)
 end
 
 def create_pipeline_for_storage(scan_root, filepile_root)
-  timestamp = Time.now.to_i
-  checksum = StringHash.md5(scan_root + filepile_root)
-  scan_index = File.join filepile_root, "#{timestamp}_#{checksum}.store"
-
   pipeline_config = {
     jobs: {
       store: { # scan a directory and store each file in the filepile system
@@ -110,7 +106,6 @@ def create_pipeline_for_storage(scan_root, filepile_root)
         outputs: {
           files: {
             filepile_root: filepile_root,
-            scan_index: scan_index,
           },
         },
         worker: {
@@ -139,7 +134,8 @@ when 's'
   filepile_root = ARGV[2]
 
   pipeline = create_pipeline_for_storage(scan_root, filepile_root)
-  puts pipeline.run(LazyJob)
+  pipeline.add_options(debug_level: :all)
+  puts pipeline.run(Job) # Use the 'Job' class to make it run even if the output folder exist
 
 when 'p'
   # run a pipeline of jobs
@@ -147,7 +143,7 @@ when 'p'
   output_files_dir = ARGV[2]
 
   pipeline = create_pipeline(scan_root, output_files_dir)
-  puts pipeline.simulate(LazyJob)
-  puts pipeline.run(LazyJob)
+  puts pipeline.simulate(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
+  puts pipeline.run(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
 
 end

@@ -21,11 +21,16 @@ class FilePileStorer < Worker
     scan_root = input_file(:scan_root)
     filepile_root = output_file(:filepile_root)
 
+    filepile = FilePileDir.new(filepile_root)
+
+    timestamp = Time.now.to_i
+    checksum = StringHash.md5(scan_root + filepile_root)
+    scan_index = File.join filepile.logs, "#{timestamp}_#{checksum}.store"
+
     puts "store()"
     puts " scan_root: " + scan_root
     puts " filepile_root: " + filepile_root
-
-    file_pile = FilePileDir.new(filepile_root)
+    puts " scan_index: " + scan_index
 
     return # debug exit
 

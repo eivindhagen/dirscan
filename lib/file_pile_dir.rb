@@ -14,11 +14,15 @@ class FilePileDir
   # the necessary directories will be created if they do not already exist
   public
   def initialize(filepile_root)
+    puts "FilePileDir::initialize(#{filepile_root})"
     @root = filepile_root
 
-    # create filepile_root folder (unless it already exist)
+    # ensure the root folder exist, or create it
     unless Dir.exist?(@root)
       FileUtils.mkdir_p(@root)
+      puts "root created: #{@root}"
+    else
+      puts "root exists: #{@root}"
     end
 
     # ensure each standard sub-dir exist, or create it
@@ -26,8 +30,27 @@ class FilePileDir
       fullpath = File.join @root, dir[:path]
       unless Dir.exist? fullpath
         FileUtils.mkdir_p fullpath
+        puts "sub-dir created: #{fullpath}"
+      else
+        puts "sub-dir exists: #{fullpath}"
       end
     end
-
   end
+
+  def filedata
+    File.join @root, 'filedata'
+  end
+
+  def metadata
+    File.join @root, 'metadata'
+  end
+
+  def logs
+    File.join @root, 'logs'
+  end
+
+  def temp
+    File.join @root, 'temp'
+  end
+
 end
