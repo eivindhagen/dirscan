@@ -1,8 +1,11 @@
 # dirscan.rb
 
+require File.join(File.dirname(__FILE__), 'lib', 'hostinfo')
+require File.join(File.dirname(__FILE__), 'lib', 'indexfile_worker')
 require File.join(File.dirname(__FILE__), 'lib', 'dirscanner')
 require File.join(File.dirname(__FILE__), 'lib', 'file_pile_storer')
 require File.join(File.dirname(__FILE__), 'lib', 'pipeline')
+require File.join(File.dirname(__FILE__), 'lib', 'file_pile_dir')
 
 def create_pipeline(scan_root, dst_files_dir)
   dirname = File.basename(scan_root)
@@ -95,6 +98,13 @@ def create_pipeline(scan_root, dst_files_dir)
 end
 
 def create_pipeline_for_storage(scan_root, filepile_root)
+  filepile = FilePileDir.new(filepile_root)
+
+  timestamp = Time.now.to_i
+  checksum = StringHash.md5(HostInfo.name + scan_root + filepile_root) # make it unique to avoid file name collisions
+  scan_index = File.join filepile.logs, "#{timestamp}_#{checksum}.store"
+  scan_unpack = scan_index + '.json'
+
   pipeline_config = {
     jobs: {
       store: { # scan a directory and store each file in the filepile system
@@ -106,16 +116,34 @@ def create_pipeline_for_storage(scan_root, filepile_root)
         outputs: {
           files: {
             filepile_root: filepile_root,
+            scan_index: scan_index,
           },
         },
         worker: {
           ruby_class: :FilePileStorer,
           ruby_method: :store,
         }
+      },
+      unpack: { # unpack the index file, writing a text version of the file
+        inputs: {
+          files: {
+            scan_index: scan_index,
+          }
+        },
+        outputs: {
+          files: {
+            scan_unpack: scan_unpack,
+          },
+        },
+        worker: {
+          ruby_class: :IndexFileWorker,
+          ruby_method: :unpack,
+        }
       }
+
     },
 
-    job_order: [:store],
+    job_order: [:store, :unpack],
   }
 
   return Pipeline.new(pipeline_config)

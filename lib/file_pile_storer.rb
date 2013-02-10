@@ -1,13 +1,12 @@
 require File.join(File.dirname(__FILE__), 'hasher')
+require File.join(File.dirname(__FILE__), 'hostinfo')
 require File.join(File.dirname(__FILE__), 'pathinfo')
 require File.join(File.dirname(__FILE__), 'indexfile')
 require File.join(File.dirname(__FILE__), 'pipeline')
-require File.join(File.dirname(__FILE__), 'file_pile_dir')
 
 require 'pathname'
 require 'json'
 require 'bindata'
-require 'socket'
 require 'fileutils'
 
 class FilePileStorer < Worker
@@ -18,54 +17,35 @@ class FilePileStorer < Worker
     required_input_files :scan_root
     required_output_files :filepile_root
 
+    timestamp = Time.now.to_i
+
     scan_root = input_file(:scan_root)
     filepile_root = output_file(:filepile_root)
-
-    filepile = FilePileDir.new(filepile_root)
-
-    timestamp = Time.now.to_i
-    checksum = StringHash.md5(scan_root + filepile_root)
-    scan_index = File.join filepile.logs, "#{timestamp}_#{checksum}.store"
+    scan_index = output_file(:scan_index)
 
     puts "store()"
     puts " scan_root: " + scan_root
     puts " filepile_root: " + filepile_root
     puts " scan_index: " + scan_index
 
-    return # debug exit
-
-    timestamp = Time.now.to_i unless @timestamp
-
     # create scan object, contains meta-data for the entire scan
     scan_info = {
       :type => :store,
-      :host_name => Socket.gethostname,
+      :host_name => HostInfo.name,
       :scan_root => input_file(:scan_root),
       :scan_root_real => Pathname.new(input_file(:scan_root)).realpath,  # turn scan_root into the canonical form, making it absolute, with no symlinks
       :timestamp => timestamp,
-      :index_path => output_file(:scan_index),
+      :index_path => scan_index,
       :verbose => input_value(:verbose, :default => false),
     }
 
-    # templates specify how to create the hash source strings for various dir entry types
-    if input_value(:quick_scan, :default => false)
-      # quick scan does not need hash templates
-      scan_info[:quick] = true
-    else
-      scan_info.merge!({
-        :symlink_hash_template  => 'name+mode+owner+group+mtime+link_path'.freeze, # size of symlink itself, not the target
-        :file_hash_template     => 'name+mode+owner+group+mtime+size+sha256'.freeze,  # size and content hash
-        :dir_hash_template      => 'name+mode+owner+group+mtime+content_size+content_hash+meta_hash'.freeze,  # size/hash of dir's content
-      })
-    end
-
-    # create the index file, and perform the scan
-    IndexFile::Writer.new(output_file(:scan_index)) do |index_file|
+    # create the index file, and store all files in the file pile
+    IndexFile::Writer.new(scan_index) do |index_file|
       # write dirscan meta-data
       index_file.write_object(scan_info)
 
       # scan recursively
-      @scan_result = scan_recursive(index_file, scan_info, input_file(:scan_root))
+      # @scan_result = scan_recursive(index_file, scan_info, input_file(:scan_root))
     end
 
     return @scan_result
@@ -83,25 +63,7 @@ class FilePileStorer < Worker
 
 
 
-  # scan a directory and all it's sub-directories (recursively)
-  #
-  # Consider this example directory tree:
-  #   dir-a
-  #     file-1
-  #     symlink-x
-  #     file-2
-  #     dir-b
-  #       file 3
-  #
-  # The records would be written in this order (dir records are written twice, first initial, then final):
-  #   dir-a (initial)
-  #   file-1
-  #   symlink-x
-  #   file-2
-  #   dir-b (initial)
-  #   file-3
-  #   dir-b (final)
-  #   dir-a (final)
+  # scan a directory and all it's sub-directories (recursively), and store each file in the File Pile
   #
   def scan_recursive(index_file, scan_info, path)
     base_path = Pathname.new(path)

@@ -12,11 +12,12 @@ class DirScanner < Worker
   attr_accessor :inputs, :outputs
 
   # perform a directory scan, by inspecting all files, symlinks and folders (recursively)
+  # creates an index file with all the metadata for each file that was scanned
   def scan()
     required_input_files :scan_root
     required_output_files :scan_index
 
-    timestamp = Time.now.to_i unless @timestamp
+    timestamp = Time.now.to_i
     
     # index file will be inside the scan_root foler, unless otherwise specified
     # output(:scan_index) ||= File.join(real_scan_root, ".dirscan_#{timestamp}")
@@ -56,6 +57,7 @@ class DirScanner < Worker
     return @scan_result
   end
 
+  # unpack a binary index file and write a text version of the file
   def unpack()
     required_input_files :scan_index
     required_output_files :scan_unpack

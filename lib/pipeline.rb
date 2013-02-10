@@ -208,7 +208,7 @@ class Job
 end
 
 # LazyJob will skip the work if the output file(s) already exist
-# This will refuse to do work whebn the input is fresh and the output is stale, so beware!
+# This will refuse to do work if the input files are fresh and the output files are stale, so beware!
 class LazyJob < Job
   def output_files_exist?
     outputs[:files].each do |file_key, file_path|
