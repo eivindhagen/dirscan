@@ -1,4 +1,6 @@
-gem 'json'
+source 'https://rubygems.org'
+
+gem 'json', '1.7.6'
 gem 'bindata'
 
 group :development do

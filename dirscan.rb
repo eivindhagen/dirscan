@@ -1,6 +1,7 @@
 # dirscan.rb
 
 require File.join(File.dirname(__FILE__), 'lib', 'dirscanner')
+require File.join(File.dirname(__FILE__), 'lib', 'file_pile_storer')
 require File.join(File.dirname(__FILE__), 'lib', 'pipeline')
 
 def create_pipeline(scan_root, dst_files_dir)
@@ -93,9 +94,52 @@ def create_pipeline(scan_root, dst_files_dir)
   return Pipeline.new(pipeline_config)
 end
 
+def create_pipeline_for_storage(scan_root, filepile_root)
+  timestamp = Time.now.to_i
+  checksum = StringHash.md5(scan_root + filepile_root)
+  scan_index = File.join filepile_root, "#{timestamp}_#{checksum}.store"
+
+  pipeline_config = {
+    jobs: {
+      store: { # scan a directory and store each file in the filepile system
+        inputs: {
+          files: {
+            scan_root: scan_root,
+          }
+        },
+        outputs: {
+          files: {
+            filepile_root: filepile_root,
+            scan_index: scan_index,
+          },
+        },
+        worker: {
+          ruby_class: :FilePileStorer,
+          ruby_method: :store,
+        }
+      }
+    },
+
+    job_order: [:store],
+  }
+
+  return Pipeline.new(pipeline_config)
+end
+
 # command line arguments
 command = ARGV[0]
 case command
+
+when 's'
+  # store files in a filepile
+  
+  # arg 1 is the location of the input files (should be a directory, will be scanned recursively)
+  scan_root = ARGV[1]
+  # arg 2 is the location of the output filepile (it's root path, will be created if it does not exist)
+  filepile_root = ARGV[2]
+
+  pipeline = create_pipeline_for_storage(scan_root, filepile_root)
+  puts pipeline.run(LazyJob)
 
 when 'p'
   # run a pipeline of jobs

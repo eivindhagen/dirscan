@@ -57,6 +57,7 @@ class Worker
     end
   end
 
+  # verifies that the given input files/paths are specified in the config, and that the files/paths exist
   def required_input_files(*req_input_files)
     return if req_input_files.blank?
 
@@ -76,6 +77,7 @@ class Worker
     end
   end
 
+  # verifies that the given output files/paths are specific in the config
   def required_output_files(*req_output_files)
     return if req_output_files.blank?
 
@@ -108,6 +110,8 @@ class Worker
     end
   end
 
+  # get the value (path) of an input-file parameter
+  # if the given parameter does not exist, then options[:default] is returned, if it is present
   def input_file(sym, options = {})
     if inputs[:files] && inputs[:files].key?(sym)
       return inputs[:files][sym]
@@ -117,6 +121,8 @@ class Worker
     end
   end
 
+  # get the value (path) of an output-file parameter
+  # if the given parameter does not exist, then options[:default] is returned, if it is present
   def output_file(sym, options = {})
     if outputs[:files] && outputs[:files].key?(sym)
       return outputs[:files][sym]
@@ -177,7 +183,7 @@ end
 class LazyJob < Job # will not run the job if the output file(s) already exist
   def output_files_exist?
     outputs[:files].each do |file_key, file_path|
-      unless File.exist?(file_path)
+      unless file_path && File.exist?(file_path)
         return false
       end
     end
