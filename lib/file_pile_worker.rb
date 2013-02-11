@@ -9,7 +9,7 @@ require 'json'
 require 'bindata'
 require 'fileutils'
 
-class FilePileStorer < Worker
+class FilePileWorker < Worker
   attr_accessor :inputs, :outputs
 
   # perform a directory scan, by inspecting all files, symlinks and folders (recursively)

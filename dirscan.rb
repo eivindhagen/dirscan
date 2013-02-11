@@ -3,7 +3,7 @@
 require File.join(File.dirname(__FILE__), 'lib', 'hostinfo')
 require File.join(File.dirname(__FILE__), 'lib', 'indexfile_worker')
 require File.join(File.dirname(__FILE__), 'lib', 'dirscan_worker')
-require File.join(File.dirname(__FILE__), 'lib', 'file_pile_storer')
+require File.join(File.dirname(__FILE__), 'lib', 'file_pile_worker')
 require File.join(File.dirname(__FILE__), 'lib', 'pipeline')
 require File.join(File.dirname(__FILE__), 'lib', 'file_pile_dir')
 
@@ -120,7 +120,7 @@ def create_pipeline_for_storage(scan_root, filepile_root)
           },
         },
         worker: {
-          ruby_class: :FilePileStorer,
+          ruby_class: :FilePileWorker,
           ruby_method: :store,
         }
       },
