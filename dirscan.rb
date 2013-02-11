@@ -7,96 +7,6 @@ require File.join(File.dirname(__FILE__), 'lib', 'file_pile_worker')
 require File.join(File.dirname(__FILE__), 'lib', 'pipeline')
 require File.join(File.dirname(__FILE__), 'lib', 'file_pile_dir')
 
-def create_pipeline(scan_root, dst_files_dir)
-  dirname = File.basename(scan_root)
-
-  scan_index = File.join dst_files_dir, "#{dirname}.dirscan"
-  analysis = File.join dst_files_dir, "#{dirname}.dirscan.analysis"
-  analysis_report = File.join dst_files_dir, "#{dirname}.dirscan.analysis.report"
-  iddupe_files = File.join dst_files_dir, "#{dirname}.dirscan.analysis.iddupe_files"
-  iddupe_files_report = File.join dst_files_dir, "#{dirname}.dirscan.analysis.iddupe_files.report"
-
-  pipeline_config = {
-    jobs: {
-      scan: { # scan a directory and record file info for entire tree
-        inputs: {
-          files: {
-            scan_root: scan_root,
-          },
-          values: {
-            quick_scan: true,       # quick_scan = do not generate content checksums
-          }
-        },
-        outputs: {
-          files: {
-            scan_index: scan_index,
-          },
-        },
-        worker: {
-          ruby_class: :DirScanWorker,
-          ruby_method: :scan,
-        }
-      },
-
-      analyze: { # analyze the directory scan to identify which file sizes may contain duplicates (same-size is step 1 in finding dupes)
-        inputs: {
-          files: {
-            scan_index: scan_index,
-          },
-        },
-        outputs: {
-          files: {
-            analysis: analysis,
-          },
-        },
-        worker: {
-          ruby_class: :DirScanWorker,
-          ruby_method: :analyze,
-        }
-      },
-
-      iddupe_files: { # positively identify duplicate files (within each group of same-size files)
-        inputs: {
-          files: {
-            scan_index: scan_index,
-            analysis: analysis,
-          },
-        },
-        outputs: {
-          files:{
-            iddupe_files: iddupe_files,
-          },
-        },
-        worker: {
-          ruby_class: :DirScanWorker,
-          ruby_method: :iddupe_files,
-        }
-      },
-
-      iddupe_files_report: { # generate summary of duplicate files, including the number of redundant bytes or each file-size
-        inputs: {
-          files: {
-            iddupe_files: iddupe_files,
-          },
-        },
-        outputs: {
-          files: {
-            iddupe_files_report: iddupe_files_report,
-          },
-        },
-        worker: {
-          ruby_class: :DirScanWorker,
-          ruby_method: :iddupe_files_report,
-        }
-      },
-    },
-
-    job_order: [:scan, :analyze, :iddupe_files, :iddupe_files_report],
-  }
-
-  return Pipeline.new(pipeline_config)
-end
-
 def create_pipeline_for_storage(scan_root, filepile_root)
   filepile = FilePileDir.new(filepile_root)
 
@@ -149,11 +59,123 @@ def create_pipeline_for_storage(scan_root, filepile_root)
   return Pipeline.new(pipeline_config)
 end
 
+def create_pipeline_for_scan(scan_root, dst_files_dir)
+  dirname = File.basename(scan_root)
+
+  scan_index = File.join dst_files_dir, "#{dirname}.dirscan"
+  scan_unpack = File.join dst_files_dir, "#{dirname}.dirscan.unpack"
+  analysis = File.join dst_files_dir, "#{dirname}.dirscan.analysis"
+  analysis_report = File.join dst_files_dir, "#{dirname}.dirscan.analysis.report"
+  iddupe_files = File.join dst_files_dir, "#{dirname}.dirscan.analysis.iddupe_files"
+  sha256_cache = File.join dst_files_dir, "#{dirname}.dirscan.sha256_cache"
+  iddupe_files_report = File.join dst_files_dir, "#{dirname}.dirscan.analysis.iddupe_files.report"
+
+  pipeline_config = {
+    jobs: {
+      scan: { # scan a directory and record file info for entire tree
+        inputs: {
+          files: {
+            scan_root: scan_root,
+          },
+          values: {
+            quick_scan: true,       # quick_scan = do not generate content checksums
+          }
+        },
+        outputs: {
+          files: {
+            scan_index: scan_index,
+          },
+        },
+        worker: {
+          ruby_class: :DirScanWorker,
+          ruby_method: :scan,
+        }
+      },
+
+      unpack: { # unpack a scan_index into a human readable format (JSON)
+        inputs: {
+          files: {
+            scan_index: scan_index,
+          },
+        },
+        outputs: {
+          files: {
+            scan_unpack: scan_unpack,
+          },
+        },
+        worker: {
+          ruby_class: :IndexFileWorker,
+          ruby_method: :unpack,
+        }
+      },
+
+      analyze: { # analyze the directory scan to identify which file sizes may contain duplicates (same-size is step 1 in finding dupes)
+        inputs: {
+          files: {
+            scan_index: scan_index,
+          },
+        },
+        outputs: {
+          files: {
+            analysis: analysis,
+          },
+        },
+        worker: {
+          ruby_class: :DirScanWorker,
+          ruby_method: :analyze,
+        }
+      },
+
+      iddupe_files: { # positively identify duplicate files (within each group of same-size files)
+        inputs: {
+          files: {
+            scan_index: scan_index,
+            analysis: analysis,
+          },
+        },
+        outputs: {
+          files:{
+            iddupe_files: iddupe_files,
+            sha256_cache: sha256_cache,
+          },
+        },
+        worker: {
+          ruby_class: :DirScanWorker,
+          ruby_method: :iddupe_files,
+        }
+      },
+
+      iddupe_files_report: { # generate summary of duplicate files, including the number of redundant bytes or each file-size
+        inputs: {
+          files: {
+            iddupe_files: iddupe_files,
+            sha256_cache: sha256_cache,
+          },
+        },
+        outputs: {
+          files: {
+            iddupe_files_report: iddupe_files_report,
+          },
+        },
+        worker: {
+          ruby_class: :DirScanWorker,
+          ruby_method: :iddupe_files_report,
+        }
+      },
+    },
+
+    job_order: [:scan, :unpack, :analyze, :iddupe_files, :iddupe_files_report],
+  }
+
+  return Pipeline.new(pipeline_config)
+end
+
+
 # command line arguments
 command = ARGV[0]
 case command
 
-when 's'
+when 'store'
   # store files in a filepile
   
   # arg 1 is the location of the input files (should be a directory, will be scanned recursively)
@@ -165,12 +187,12 @@ when 's'
   pipeline.add_options(debug_level: :all)
   pipeline.run(Job) # Use the 'Job' class to make it run even if the output folder exist
 
-when 'p'
-  # run a pipeline of jobs
+when 'scan'
+  # scan a directory and generate scan_index, analysis, and reports
   scan_root = ARGV[1]
   output_files_dir = ARGV[2]
 
-  pipeline = create_pipeline(scan_root, output_files_dir)
+  pipeline = create_pipeline_for_scan(scan_root, output_files_dir)
   pipeline.simulate(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
   pipeline.run(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
 

@@ -58,24 +58,6 @@ class DirScanWorker < Worker
   end
 
 
-  # unpack a binary index file and write a text version of the file, which is more human friendly
-  def unpack(options = {})
-    required_input_files :scan_index
-    required_output_files :scan_unpack
-
-    # read the index file
-    IndexFile::Reader.new(input_file(:scan_index)) do |index_file|
-      # write the text file
-      File.open(output_file(:scan_unpack), 'w') do |unpack_file|
-        while not index_file.eof? do
-          object = index_file.read_object
-          unpack_file.write(JSON.pretty_generate(object) + "\n")
-        end
-      end
-    end
-  end
-
-
   # Extract all entries from an index file and create a nested structure of dir hashes (for further processing)
   #
   # The index file is in a special JSON format, and after extracting the JSON documents they are all linked

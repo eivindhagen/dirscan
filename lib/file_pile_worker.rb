@@ -29,7 +29,7 @@ class FilePileWorker < Worker
     puts " scan_index: " + scan_index
 
     # create scan object, contains meta-data for the entire scan
-    scan_info = {
+    store_info = {
       :type => :store,
       :host_name => HostInfo.name,
       :scan_root => input_file(:scan_root),
@@ -45,7 +45,7 @@ class FilePileWorker < Worker
       index_file.write_object(scan_info)
 
       # scan recursively
-      # @scan_result = scan_recursive(index_file, scan_info, input_file(:scan_root))
+      @scan_result = store_recursive(index_file, store_info, scan_root)
     end
 
     return @scan_result
@@ -63,12 +63,11 @@ class FilePileWorker < Worker
 
 
 
-  # scan a directory and all it's sub-directories (recursively), and store each file in the File Pile
+  # store all files of a directory (recursively) in the FilePile
   #
-  def scan_recursive(index_file, scan_info, path)
-    base_path = Pathname.new(path)
-
-    pathinfo = PathInfo.new(path)
+  def store_recursive(index_file, store_info, path)
+    base_path = Pathname.new(path) # current path (recursive)
+    pathinfo = PathInfo.new(path) # pathinfo gives easy access to metadata
 
     # write initial dir record
     dir_info_initial = {
