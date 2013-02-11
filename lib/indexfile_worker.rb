@@ -12,7 +12,7 @@ class IndexFileWorker < Worker
   attr_accessor :inputs, :outputs
 
   # unpack a binary index file and write a text version of the file
-  def unpack()
+  def unpack(options = {})
     required_input_files :scan_index
     required_output_files :scan_unpack
 

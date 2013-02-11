@@ -13,7 +13,7 @@ class FilePileStorer < Worker
   attr_accessor :inputs, :outputs
 
   # perform a directory scan, by inspecting all files, symlinks and folders (recursively)
-  def store()
+  def store(options = {})
     required_input_files :scan_root
     required_output_files :filepile_root
 

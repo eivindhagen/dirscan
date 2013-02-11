@@ -8,12 +8,12 @@ require 'json'
 require 'bindata'
 require 'socket'
 
-class DirScanner < Worker
+class DirScanWorker < Worker
   attr_accessor :inputs, :outputs
 
   # perform a directory scan, by inspecting all files, symlinks and folders (recursively)
   # creates an index file with all the metadata for each file that was scanned
-  def scan()
+  def scan(options = {})
     required_input_files :scan_root
     required_output_files :scan_index
 
@@ -57,8 +57,9 @@ class DirScanner < Worker
     return @scan_result
   end
 
-  # unpack a binary index file and write a text version of the file
-  def unpack()
+
+  # unpack a binary index file and write a text version of the file, which is more human friendly
+  def unpack(options = {})
     required_input_files :scan_index
     required_output_files :scan_unpack
 
@@ -75,7 +76,11 @@ class DirScanner < Worker
   end
 
 
-  def extract()
+  # Extract all entries from an index file and create a nested structure of dir hashes (for further processing)
+  #
+  # The index file is in a special JSON format, and after extracting the JSON documents they are all linked
+  # together in a tree structure that mirrors the original source directory structure
+  def extract(options = {})
     required_input_files :scan_index
 
     result = {
@@ -131,7 +136,10 @@ class DirScanner < Worker
   end
 
 
-  def verify()
+  # Verify an index file by comparing the index file's metadata to the actual files on the filesystem.
+  #
+  # The index file is parsed linearly and each corresponding file is examined while parsing.
+  def verify(options = {})
     required_input_files :scan_index
 
     object_count = 0
@@ -179,7 +187,14 @@ class DirScanner < Worker
   end
 
 
-  def analyze()
+  # Analyze an index file and generate a report with the number of files that exist for each possible file-size, and 
+  # also for the number of dirs that exist for each possible dir-size.
+  #
+  # Symlinks are ignored, because they are not real files, they are just pointers to real files (or to another symlink)
+  #
+  # The analysis output is two hashes: file_sizes and dir_sizes
+  # Each hash has key => value pairs where key = size and value = count, i.e. the number of occurrences of each size
+  def analyze(options = {})
     required_input_files :scan_index
     required_output_files :analysis
 
@@ -195,6 +210,7 @@ class DirScanner < Worker
 
         case object[:type].to_sym
         when :dirscan
+          # nothing to do
         when :dir
           dir = object
           if (rec = dir[:recursive]) && (dir_size = rec[:content_size])
@@ -202,6 +218,7 @@ class DirScanner < Worker
             dir_sizes[dir_size] = (dir_sizes[dir_size] || 0) + 1
           end
         when :symlink
+          # nothing to do
         when :file
           file = object
           file_size = file[:size]
@@ -224,7 +241,13 @@ class DirScanner < Worker
     end
   end
 
-  def analysis_report
+
+  # Creates a more user-friendly report from an analysis file, where the output is sorted by key and value (separately)
+  #
+  # Report includes a sorted list with the most frequently occurring file sizes first
+  #
+  # With modification, this report can also include a list of sizes&counts that are sorted by size
+  def analysis_report(options = {})
     required_input_files :analysis
     required_output_files :analysis_report
 
@@ -246,7 +269,19 @@ class DirScanner < Worker
     return report
   end
 
-  def iddupe_files()
+
+  # Identify duplicate files, uses input scan_index and analysis (analysis of scan_index) to optimize the process.
+  #
+  # The analysis helps to speed up this process by supplying the file sizes that have duplicates, since it's only
+  # necessary to calculate the content checksums for files that are of the same length as other files.
+  # If there is only a single file with a given length, then we know that there are no duplicates of that file in
+  # the index file. There can only be duplicates when there are multiple files of the same length.
+  #
+  # The main output is iddupe_files, which includes a list of identified duplicate files, grouped by size.
+  #
+  # This also outputs sha256_cache, which will contain the sha256 checksums for all files that had their
+  # checksum calculated. This is stored for future use, to avoid having to re-calculate those checksums again.
+  def iddupe_files(options = {})
     required_input_files :scan_index, :analysis
     required_output_files :iddupe_files, :sha256_cache
 
@@ -302,7 +337,7 @@ class DirScanner < Worker
         end
       end
 
-      # remove sha256-arrays with only a single entry (no duplicates were found for that sha256)
+      # remove sha256-arrays with only a single entry (i.e. only one file has a given sha256)
       collection_by_file_size.each do |file_size, collection|
         collection.keys.each do |sha256|
           if collection[sha256].size == 1
@@ -310,7 +345,7 @@ class DirScanner < Worker
           end
         end
       end
-      # remove empty collections (there were no duplicates for that file-size)
+      # remove empty collections (file-sizes without any duplicates)
       collection_by_file_size.keys.each do |file_size|
         if collection_by_file_size[file_size].empty?
           collection_by_file_size.delete(file_size)
@@ -339,7 +374,12 @@ class DirScanner < Worker
     end
   end
 
-  def iddupe_files_report
+
+  # Generate a human friendly JSON report of identified duplicate files, using iddupe_files as inpput
+  #
+  # Report includes the number of redundant files found and the total size of those files (i.e. wasted space)
+  # It also includes a list of the duplicated files, sorted by file size
+  def iddupe_files_report(options = {})
     required_input_files :iddupe_files
     required_output_files :iddupe_files_report
 
@@ -379,7 +419,13 @@ class DirScanner < Worker
   end
 
 
-  def iddupe_dirs()
+  # Identify duplicate directories in a scan_index, using previous calculations as input (to optimize the process):
+  #   analysis     - tells us the number of files that exist for each file size
+  #   iddupe_files - list of known duplicate files
+  #   sha256_cache - known sha256 checksums, so we don't have to re-calculate those that have already been calculated
+  #
+  # The output is iddupe_dirs, which includes a list of identified duplicate dirs, grouped by size.
+  def iddupe_dirs(options = {})
     required_input_files :scan_index, :analysis, :iddupe_files, :sha256_cache
     required_output_files :iddupe_dirs
 

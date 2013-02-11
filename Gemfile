@@ -22,4 +22,6 @@ group :development do
 
   # colors for Test::Unit
   gem 'mynyml-redgreen'
+
+  gem 'debugger'
 end

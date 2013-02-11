@@ -2,7 +2,7 @@
 
 require File.join(File.dirname(__FILE__), 'lib', 'hostinfo')
 require File.join(File.dirname(__FILE__), 'lib', 'indexfile_worker')
-require File.join(File.dirname(__FILE__), 'lib', 'dirscanner')
+require File.join(File.dirname(__FILE__), 'lib', 'dirscan_worker')
 require File.join(File.dirname(__FILE__), 'lib', 'file_pile_storer')
 require File.join(File.dirname(__FILE__), 'lib', 'pipeline')
 require File.join(File.dirname(__FILE__), 'lib', 'file_pile_dir')
@@ -33,7 +33,7 @@ def create_pipeline(scan_root, dst_files_dir)
           },
         },
         worker: {
-          ruby_class: :DirScanner,
+          ruby_class: :DirScanWorker,
           ruby_method: :scan,
         }
       },
@@ -50,7 +50,7 @@ def create_pipeline(scan_root, dst_files_dir)
           },
         },
         worker: {
-          ruby_class: :DirScanner,
+          ruby_class: :DirScanWorker,
           ruby_method: :analyze,
         }
       },
@@ -68,7 +68,7 @@ def create_pipeline(scan_root, dst_files_dir)
           },
         },
         worker: {
-          ruby_class: :DirScanner,
+          ruby_class: :DirScanWorker,
           ruby_method: :iddupe_files,
         }
       },
@@ -85,7 +85,7 @@ def create_pipeline(scan_root, dst_files_dir)
           },
         },
         worker: {
-          ruby_class: :DirScanner,
+          ruby_class: :DirScanWorker,
           ruby_method: :iddupe_files_report,
         }
       },
@@ -163,7 +163,7 @@ when 's'
 
   pipeline = create_pipeline_for_storage(scan_root, filepile_root)
   pipeline.add_options(debug_level: :all)
-  puts pipeline.run(Job) # Use the 'Job' class to make it run even if the output folder exist
+  pipeline.run(Job) # Use the 'Job' class to make it run even if the output folder exist
 
 when 'p'
   # run a pipeline of jobs
@@ -171,7 +171,7 @@ when 'p'
   output_files_dir = ARGV[2]
 
   pipeline = create_pipeline(scan_root, output_files_dir)
-  puts pipeline.simulate(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
-  puts pipeline.run(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
+  pipeline.simulate(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
+  pipeline.run(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
 
 end

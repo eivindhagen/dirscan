@@ -9,6 +9,7 @@
 #
 # Pipeline : Executes a chain of jobs, in a predetermined order. Uses Jobs to decide if the work needs to be done, or can be skipped.
 
+require 'debugger'
 require 'yaml'
 
 require File.join(File.dirname(__FILE__), 'pathinfo')
@@ -161,49 +162,57 @@ class Job
     @config = job_config
   end
 
+  def config
+    @config
+  end
+  
+  def worker
+    config[:worker]
+  end
+
   def inputs
-    @config[:inputs]
+    config[:inputs]
   end
   def input_files
-    @config[:inputs][:files]
+    config[:inputs][:files]
   end
   def input_values
-    @config[:inputs][:values]
+    config[:inputs][:values]
   end
 
   def outputs
-    @config[:outputs]
+    config[:outputs]
   end
   def output_files
-    @config[:outputs][:files]
+    config[:outputs][:files]
   end
   def output_values
-    @config[:outputs][:values]
+    config[:outputs][:values]
   end
 
   def to_s
-    "#{@config[:worker][:ruby_class].to_s}::#{@config[:worker][:ruby_method]}"
+    "#{worker[:ruby_class].to_s}::#{worker[:ruby_method]}"
   end
 
   def ruby_class
-    Kernel.const_get(@config[:worker][:ruby_class].to_s)  # if this was Rails we could have done .to_s.constantize
+    Kernel.const_get(worker[:ruby_class].to_s)  # if this was Rails we could have done .to_s.constantize
   end
 
   def ruby_method
-    @config[:worker][:ruby_method]
+    worker[:ruby_method]
   end
 
-  def run(options)
-    puts "running job #{self}" if options[:debug_level] == :all
+  def run(options = {})
+    puts "running job: #{self}" if options[:debug_level] == :all
     # create instance of the worker class, with the given inputs & outputs
     obj = ruby_class.new(inputs, outputs)
     # call the worker method
-    obj.send ruby_method
+    obj.send ruby_method, options
   end
 
-  def simulate(options)
-    puts "simulating job #{self}" if options[:debug_level] == :all
-    "#{ruby_class}.new(#{inputs}, #{outputs}).#{ruby_method}"
+  def simulate(options = {})
+    puts "simulating job: #{self}" if options[:debug_level] == :all
+    "#{ruby_class}.new(#{inputs}, #{outputs}).#{ruby_method}(#{options})"
   end
 end
 
@@ -226,7 +235,7 @@ class LazyJob < Job
   def run(options)
     if output_stale?
       puts "performing job #{self} because output is stale" if options[:debug_level] == :all
-      super
+      super(options)
     else
       puts "skipping job #{self} because output is fresh" if options[:debug_level] == :all
       nil
@@ -236,7 +245,7 @@ class LazyJob < Job
   def simulate(options)
     if output_stale?
       puts "performing job #{self} because output is stale" if options[:debug_level] == :all
-      super
+      super(options)
     else
       puts "skipping job #{self} because output is fresh" if options[:debug_level] == :all
       nil
@@ -274,8 +283,9 @@ end
 #
 # The run() and simulate() methods create Job objects, which in turn execute Worker methods to do the work.
 class Pipeline
-  def initialize(pipeline_config)
+  def initialize(pipeline_config, options = {})
     @config = pipeline_config
+    @options = options
   end
 
   def options

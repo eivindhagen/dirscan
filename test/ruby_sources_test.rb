@@ -6,7 +6,7 @@ require "test/unit"
 require 'redgreen'
 
 #include the classes we are testing
-require File.expand_path('../lib/dirscanner.rb', File.dirname(__FILE__))
+require File.expand_path('../lib/dirscan_worker.rb', File.dirname(__FILE__))
 
 class TestRubySources < Test::Unit::TestCase
 
