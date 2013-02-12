@@ -1,4 +1,8 @@
-gem 'json'
+source 'https://rubygems.org'
+
+gem 'json', '1.7.6'
+
+
 gem 'bindata'
 
 group :development do
@@ -20,10 +24,12 @@ group :development do
   # notify using the terminal window's title (name)
   gem 'terminal-notifier-guard'
 
-  # colors for Test::Unit
-  gem 'mynyml-redgreen'
-
   gem 'simplecov'
 
   gem 'rake'
+
+  gem 'debugger'
+  gem 'mynyml-redgreen'
+
+  gem 'debugger'
 end

@@ -5,14 +5,14 @@ require File.expand_path('test_helper.rb', File.dirname(__FILE__))
 require File.expand_path('../lib/assert_json_file_contains.rb', File.dirname(__FILE__))
 
 #include the classes we are testing
-require File.expand_path('../lib/dirscanner.rb', File.dirname(__FILE__))
+require File.expand_path('../lib/dirscan_worker.rb', File.dirname(__FILE__))
 
-class TestDirScanner < Test::Unit::TestCase
+class TestDirScanWorker < Test::Unit::TestCase
 
   def test_create
     inputs = {:scan_root => 'test_data/empty'}
     outputs = {}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     assert_equal('test_data/empty', ds.inputs[:scan_root])
     assert_equal(nil, ds.inputs[:index_path])
     assert_equal(nil, ds.inputs[:timestamp])
@@ -23,19 +23,19 @@ class TestDirScanner < Test::Unit::TestCase
     # scan
     inputs = {files: {scan_root: 'test_data/one_file'}}
     outputs = {files: {scan_index: 'tmp/one_file.dirscan'}}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     scan_result = ds.scan
 
     # unpack the scan
     inputs = {files: {scan_index: 'tmp/one_file.dirscan'}}
     outputs = {files: {scan_unpack: 'tmp/one_file.json'}}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     unpack_result = ds.unpack
 
     # extract the scan, verify attributes
     inputs = {files: {scan_index: 'tmp/one_file.dirscan'}}
     outputs = {}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     extract_result = ds.extract
     assert_equal('test_data/one_file', extract_result[:dirscan][:scan_root])
 
@@ -94,7 +94,7 @@ class TestDirScanner < Test::Unit::TestCase
     # verify the scan, there should be 0 issues
     inputs = {files: {scan_index: 'tmp/one_file.dirscan'}}
     outputs = {}
-    dv = DirScanner.new(inputs, outputs)
+    dv = DirScanWorker.new(inputs, outputs)
     verify_result = ds.verify
     assert_equal(0, verify_result[:issues_count])
   end
@@ -105,19 +105,19 @@ class TestDirScanner < Test::Unit::TestCase
     # scan
     inputs = {files: {scan_root: 'test_data/one_file'}, values: {quick_scan: true}}
     outputs = {files: {scan_index: 'tmp/one_file_quick.dirscan'}}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     scan_result = ds.scan
 
     # unpack the scan
     inputs = {files: {scan_index: 'tmp/one_file_quick.dirscan'}}
     outputs = {files: {scan_unpack: 'tmp/one_file_quick.json'}}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     unpack_result = ds.unpack
 
     # extract the scan, verify attributes
     inputs = {files: {scan_index: 'tmp/one_file_quick.dirscan'}}
     outputs = {}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     extract_result = ds.extract
     # puts "extract_result: #{extract_result}"
     assert_equal('test_data/one_file', extract_result[:dirscan][:scan_root])
@@ -161,21 +161,21 @@ class TestDirScanner < Test::Unit::TestCase
     # verify the scan, there should be 0 issues
     inputs = {files: {scan_index: 'tmp/one_file_quick.dirscan'}}
     outputs = {}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     verify_result = ds.verify
     assert_equal(0, verify_result[:issues_count])
 
     # analyze the scan
     inputs = {files: {scan_index: 'tmp/one_file_quick.dirscan'}}
     outputs = {files: {analysis: 'tmp/one_file_quick.dirscan.analysis'}}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     analysis_result = ds.analyze
     assert_equal({:file_sizes=>{3=>1}, :dir_sizes=>{3=>1}}, analysis_result)
 
     # analysis report
     inputs = {files: {analysis: 'tmp/one_file_quick.dirscan.analysis'}}
     outputs = {files: {analysis_report: 'tmp/one_file_quick.dirscan.analysis.report'}}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     analysis_report = ds.analysis_report
     assert_equal({:sorted_by_count=>[[3, 1]]}, analysis_report)
 
@@ -192,7 +192,7 @@ class TestDirScanner < Test::Unit::TestCase
         sha256_cache: 'tmp/one_file_quick.dirscan.sha256_cache',
       }
     }
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     iddupe_files_result = ds.iddupe_files
     assert_equal({:collection_by_file_size=>{}}, iddupe_files_result, "there should be no dupes")
   end
@@ -203,32 +203,32 @@ class TestDirScanner < Test::Unit::TestCase
     # scan
     inputs = {files: {:scan_root => 'test_data/nested1_mixed'}, values: {:quick_scan => true}}
     outputs = {files: {:scan_index => 'tmp/nested1_mixed.dirscan'}}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     scan_result = ds.scan
 
     # unpack the scan
     inputs = {files: {:scan_index => 'tmp/nested1_mixed.dirscan'}}
     outputs = {files: {:scan_unpack => 'tmp/nested1_mixed.json'}}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     unpack_result = ds.unpack
 
     # extract the scan, verify attributes
     inputs = {files: {:scan_index => 'tmp/nested1_mixed.dirscan'}}
     outputs = {}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     extract_result = ds.extract
 
     # analyze the scan
     inputs = {files: {:scan_index => 'tmp/nested1_mixed.dirscan'}}
     outputs = {files: {:analysis => 'tmp/nested1_mixed.dirscan.analysis'}}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     analysis_result = ds.analyze
     assert_equal({:file_sizes=>{0=>4, 5=>2, 12=>3, 50=>3}, :dir_sizes=>{0=>1, 5=>2, 62=>3, 196=>1}}, analysis_result)
 
     # analysis report
     inputs = {files: {:analysis => 'tmp/nested1_mixed.dirscan.analysis'}}
     outputs = {files: {:analysis_report => 'tmp/nested1_mixed.dirscan.analysis.report'}}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     analysis_report = ds.analysis_report
     assert_equal({:sorted_by_count=>[[0, 4], [12, 3], [50, 3], [5, 2]]}, analysis_report)
 
@@ -245,7 +245,7 @@ class TestDirScanner < Test::Unit::TestCase
         sha256_cache: 'tmp/nested1_mixed.dirscan.sha256_cache',
       }
     }
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     iddupe_files_result = ds.iddupe_files
     assert_equal(
       {collection_by_file_size: {
@@ -283,7 +283,7 @@ class TestDirScanner < Test::Unit::TestCase
     # iddupe_files report - creates a summary from the iddupe_files result, showing the number of redundant bytes for each file-size
     inputs = {files: {:iddupe_files => 'tmp/nested1_mixed.dirscan.analysis.iddupe_files'}}
     outputs = {files: {:iddupe_files_report => 'tmp/nested1_mixed.dirscan.analysis.iddupe_files.json'}}
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     iddupe_files_report = ds.iddupe_files_report
     assert_equal(
       {
@@ -310,7 +310,7 @@ class TestDirScanner < Test::Unit::TestCase
         :iddupe_dirs => 'tmp/nested1_mixed.dirscan.analysis.iddupe_dirs'
       }
     }
-    ds = DirScanner.new(inputs, outputs)
+    ds = DirScanWorker.new(inputs, outputs)
     result = ds.iddupe_dirs
     assert_equal(
       {

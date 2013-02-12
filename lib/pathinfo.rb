@@ -1,6 +1,7 @@
 require 'open3'
 require 'time'
 
+# PathInfo class privides easy access to metadata for a directory entry (initialized using it's path)
 class PathInfo
   attr_accessor :file_path
 
