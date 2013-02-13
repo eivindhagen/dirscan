@@ -170,6 +170,34 @@ def create_pipeline_for_scan(scan_root, dst_files_dir)
   return Pipeline.new(pipeline_config)
 end
 
+def create_pipeline_for_export_csv(index_path, csv_path)
+  pipeline_config = {
+    jobs: {
+      export_csv: { # read the index file, write a CSV file
+        inputs: {
+          files: {
+            index_path: index_path,
+          }
+        },
+        outputs: {
+          files: {
+            csv_path: csv_path,
+          },
+        },
+        worker: {
+          ruby_class: :IndexFileWorker,
+          ruby_method: :export_csv,
+        }
+      }
+
+    },
+
+    job_order: [:export_csv],
+  }
+
+  return Pipeline.new(pipeline_config)
+end
+
 
 # command line arguments
 command = ARGV[0]
@@ -193,7 +221,17 @@ when 'scan'
   output_files_dir = ARGV[2].split('\\').join('/')
 
   pipeline = create_pipeline_for_scan(scan_root, output_files_dir)
-  pipeline.simulate(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
+  # pipeline.simulate(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
   pipeline.run(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
+
+when 'export_csv'
+
+  # scan a directory and generate scan_index, analysis, and reports
+  index_path = ARGV[1].split('\\').join('/')
+  csv_path = ARGV[2].split('\\').join('/')
+
+  pipeline = create_pipeline_for_export_csv(index_path, csv_path)
+  # pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating the CSV file if it's newer than the index file
+  pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
 
 end
