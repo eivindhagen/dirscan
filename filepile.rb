@@ -199,6 +199,35 @@ def create_pipeline_for_export_csv(index_path, csv_path)
 end
 
 
+def create_pipeline_for_export_sqlite3(index_path, db_path)
+  pipeline_config = {
+    jobs: {
+      export_sqlite3: { # read the index file, write a SQLite3 database file
+        inputs: {
+          files: {
+            index_path: index_path,
+          }
+        },
+        outputs: {
+          files: {
+            db_path: db_path,
+          },
+        },
+        worker: {
+          ruby_class: :IndexFileWorker,
+          ruby_method: :export_sqlite3,
+        }
+      }
+
+    },
+
+    job_order: [:export_sqlite3],
+  }
+
+  return Pipeline.new(pipeline_config)
+end
+
+
 # command line arguments
 command = ARGV[0]
 case command
@@ -231,6 +260,16 @@ when 'export_csv'
   csv_path = ARGV[2].split('\\').join('/')
 
   pipeline = create_pipeline_for_export_csv(index_path, csv_path)
+  # pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating the CSV file if it's newer than the index file
+  pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+
+when 'export_sqlite3'
+
+  # scan a directory and generate scan_index, analysis, and reports
+  index_path = ARGV[1].split('\\').join('/')
+  db_path = ARGV[2].split('\\').join('/')
+
+  pipeline = create_pipeline_for_export_sqlite3(index_path, db_path)
   # pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating the CSV file if it's newer than the index file
   pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
 
