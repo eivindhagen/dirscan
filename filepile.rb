@@ -260,7 +260,7 @@ when 'export_csv'
   csv_path = ARGV[2].split('\\').join('/')
 
   pipeline = create_pipeline_for_export_csv(index_path, csv_path)
-  # pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating the CSV file if it's newer than the index file
+  # pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
   pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
 
 when 'export_sqlite3'
@@ -270,7 +270,22 @@ when 'export_sqlite3'
   db_path = ARGV[2].split('\\').join('/')
 
   pipeline = create_pipeline_for_export_sqlite3(index_path, db_path)
-  # pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating the CSV file if it's newer than the index file
+  # pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
   pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+
+when 'export_sqlite3_all'
+  # export all *.store files to *.sqlite3 files
+  filepile_root = ARGV[1].split('\\').join('/')
+
+  filepile = FilePileDir.new(filepile_root)
+
+  # process all *.store files
+  Dir[File.join(filepile.logs, '*.store')].sort.each do |full_path|  # sort is important for deterministic content hash
+    sqlite3_path = full_path + '.sqlite3'
+    pipeline = create_pipeline_for_export_sqlite3(full_path, sqlite3_path)
+    pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
+  end
+
+
 
 end

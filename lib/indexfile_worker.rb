@@ -98,7 +98,7 @@ class IndexFileWorker < Worker
         # create table
         columns_string = db_columns.map{|col| "#{col[:name]} #{col[:type]} #{col[:extra]}"}.join(", ")
         sql = "CREATE TABLE IF NOT EXISTS files(#{columns_string})" 
-        puts "sql: #{sql}"
+        # puts "sql: #{sql}"
         db.execute sql
 
         record_id = 1
@@ -137,7 +137,7 @@ class IndexFileWorker < Worker
             end.join(",")
 
             sql = "INSERT INTO files VALUES(#{values_string})"
-            puts "sql: #{sql}"
+            # puts "sql: #{sql}"
             db.execute sql
           end
           
