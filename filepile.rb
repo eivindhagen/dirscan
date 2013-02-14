@@ -228,12 +228,42 @@ def create_pipeline_for_export_sqlite3(index_path, db_path)
 end
 
 
+def create_pipeline_for_merge_sqlite3(input1_path, input2_path, output_path)
+  pipeline_config = {
+    jobs: {
+      merge_sqlite3: { # read 2 input sqlite3 files, create a single sqlite3 output file
+        inputs: {
+          files: {
+            db_in1_path: input1_path,
+            db_in2_path: input2_path,
+          }
+        },
+        outputs: {
+          files: {
+            db_out_path: output_path,
+          },
+        },
+        worker: {
+          ruby_class: :IndexFileWorker,
+          ruby_method: :merge_sqlite3,
+        }
+      }
+
+    },
+
+    job_order: [:merge_sqlite3],
+  }
+
+  return Pipeline.new(pipeline_config)
+end
+
+
 # command line arguments
 command = ARGV[0]
 case command
 
 when 'store'
-  # store files in a filepile
+  # store files in a filepile, by recursive scan of input folder
   
   # arg 1 is the location of the input files (should be a directory, will be scanned recursively)
   scan_root = ARGV[1].split('\\').join('/')
@@ -254,8 +284,7 @@ when 'scan'
   pipeline.run(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
 
 when 'export_csv'
-
-  # scan a directory and generate scan_index, analysis, and reports
+  # export CSV file from an index file
   index_path = ARGV[1].split('\\').join('/')
   csv_path = ARGV[2].split('\\').join('/')
 
@@ -264,8 +293,7 @@ when 'export_csv'
   pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
 
 when 'export_sqlite3'
-
-  # scan a directory and generate scan_index, analysis, and reports
+  # export sqlite3 database from an index file
   index_path = ARGV[1].split('\\').join('/')
   db_path = ARGV[2].split('\\').join('/')
 
@@ -274,7 +302,7 @@ when 'export_sqlite3'
   pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
 
 when 'export_sqlite3_all'
-  # export all *.store files to *.sqlite3 files
+  # export sqlite3 database for all index files in the filepile's log directory
   filepile_root = ARGV[1].split('\\').join('/')
 
   filepile = FilePileDir.new(filepile_root)
@@ -286,6 +314,13 @@ when 'export_sqlite3_all'
     pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
   end
 
+when 'merge_sqlite3'
+  # merge two sqlite3 files, output a third file
+  input1_path = ARGV[1].split('\\').join('/')
+  input2_path = ARGV[2].split('\\').join('/')
+  output_path = ARGV[3].split('\\').join('/')
 
+  pipeline = create_pipeline_for_merge_sqlite3(input1_path, input2_path, output_path)
+  pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
 
 end

@@ -66,8 +66,9 @@ class IndexFileWorker < Worker
     end # IndexFile::Reader
   end
 
-  # exports a CSV file from a binary index file
   require 'sqlite3'
+
+  # exports a sqlite3 file from a binary index file
   def export_sqlite3(options = {})
     required_input_files :index_path
     required_output_files :db_path
@@ -130,7 +131,8 @@ class IndexFileWorker < Worker
               when 'INTEGER'
                 "#{value}"  # integers are not quoted
               when 'TEXT'
-                "'#{value}'" # strings ARE quoted
+                escaped_value = value.gsub("'", "''") # single-quotes must be doubled in order to be properly understood by SQLite3
+                "'#{escaped_value}'" # strings ARE quoted
               else
                 raise "Column type '#{db_column[:type]}' is not handled, yet..."
               end
@@ -152,6 +154,145 @@ class IndexFileWorker < Worker
 
       end
     end # IndexFile::Reader
+  end
+
+  # exports a sqlite3 file from a binary index file
+  def merge_sqlite3(options = {})
+    required_input_files :db_in1_path, :db_in2_path
+    required_output_files :db_out_path
+
+    # first copy the largest db_in file to db_out, then merge the smaller db_in file to db_out
+    db_in1_path = input_file(:db_in1_path)
+    db_in2_path = input_file(:db_in2_path)
+    db_out_path = output_file(:db_out_path)
+
+    # determine which input file is large / small
+    # it's faster to merge the small file into the large files, because there are fewer records to transfer
+    if File.size(db_in1_path) > File.size(db_in2_path)
+      db_in_large_path = db_in1_path
+      db_in_small_path = db_in2_path
+    else
+      db_in_large_path = db_in2_path
+      db_in_small_path = db_in1_path
+    end
+
+    # copy the large file to db_out
+    FileUtils.copy_file(db_in_large_path, db_out_path)
+
+    #
+    # merge small db_in to db_out, by reading all records and adding them to db_out (unless the record already exist)
+    #
+
+    db_columns_in_order = %w[ id type name size mode mtime own grp sha256 path ] # NOTE 'own' (not owner) and 'grp' (not group)
+    db_columns_info = {
+      'id'     => {type: :integer}, # 'id' will be handled in special ways (omitted in SELECT, rewritten in INSERT)
+      'type'   => {type: :integer},
+      'name'   => {type: :text},
+      'size'   => {type: :integer},
+      'mode'   => {type: :text},
+      'mtime'  => {type: :integer},
+      'own'    => {type: :text},
+      'grp'    => {type: :text},
+      'sha256' => {type: :text},
+      'path'   => {type: :text},
+    }
+
+    db_read = nil
+    db_write = nil
+
+    begin
+      # open db_in_small so we can read from it
+      db_read = SQLite3::Database.open(db_in_small_path)
+      db_read.results_as_hash = true
+
+      # open db_out so we can write to it
+      db_write = SQLite3::Database.open(db_out_path)
+      db_write.results_as_hash = true
+
+      # see how many rows are in each database
+      sql = "SELECT COUNT(*) FROM files" 
+      db_read_count = db_read.execute(sql).first[0]
+      db_write_count = db_write.execute(sql).first[0]
+      puts "db_read has #{db_read_count} rows"
+      puts "db_write has #{db_write_count} rows"
+
+      # find the largest 'id' in db_write
+      sql = "SELECT MAX(id) FROM files"
+      db_write_id_max = db_write.execute(sql).first[0]
+      puts "db_write MAX(id): #{db_write_id_max}"
+
+      # get all the records from db_read
+      # columns_string = columns_to_merge.join(',')
+      # sql = "SELECT #{columns_string} FROM files" 
+      sql = "SELECT * FROM files" 
+      # puts "sql: #{sql}"
+      in_rows = db_read.execute sql
+
+      next_id = db_write_id_max + 1
+      in_rows.each do |in_row|
+        # see if the in_row already exists in db_out
+        fields_match = db_columns_in_order.map do |field|
+          value = in_row[field]
+          db_column = db_columns_info[field]
+
+          case db_column[:type]
+          when :integer
+            if 'id' == field
+              nil # skip the 'id' field when searching for existing record in db_write
+            else
+              "#{field}=#{value}"  # integers are not quoted
+            end
+          when :text
+            escaped_value = value.gsub("'", "''") # single-quotes must be doubled in order to be properly understood by SQLite3
+            "#{field}='#{escaped_value}'" # strings ARE quoted
+          else
+            raise "Column type '#{db_column[:type]}' is not handled, yet..."
+          end
+        end.reject{|v| v.nil?}
+
+        conditions = fields_match.join(' AND ')
+        sql = "SELECT COUNT(*) FROM files WHERE #{conditions}"
+        # puts "sql: #{sql}"
+        exist_count = db_write.execute(sql).first[0].to_i
+      
+        if exist_count == 0
+          print 'I'
+          values_string = db_columns_in_order.map do |field|
+            value = in_row[field]
+            db_column = db_columns_info[field]
+
+            case db_column[:type]
+            when :integer
+              if 'id' == field
+                value = next_id   # give the record a new 'id' for it's place in db_write
+                next_id += 1      # increment for next record
+              end
+              "#{value}"  # integers are not quoted
+            when :text
+              escaped_value = value.gsub("'", "''") # single-quotes must be doubled in order to be properly understood by SQLite3
+              "'#{escaped_value}'" # strings ARE quoted
+            else
+              raise "Column type '#{db_column[:type]}' is not handled, yet..."
+            end
+          end.join(",")
+
+          sql = "INSERT INTO files VALUES(#{values_string})"
+          # puts "sql: #{sql}"
+          result = db_write.execute sql
+        else
+          print '.' # do nothing
+        end
+      end
+      
+    rescue SQLite3::Exception => e 
+      puts "Exception occured"
+      puts e
+
+    ensure
+      db_read.close if db_read
+      db_write.close if db_write
+
+    end
   end
 
 end
