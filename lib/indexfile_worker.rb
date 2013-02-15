@@ -68,6 +68,43 @@ class IndexFileWorker < Worker
 
   require 'sqlite3'
 
+  # creates an empty sqlite3 file
+  def create_sqlite3(options = {})
+    required_output_files :db_path
+
+    db_columns = [
+      {key: :id,     name: 'id',     type: 'INTEGER', extra: 'PRIMARY KEY'},
+      {key: :type,   name: 'type',   type: 'INTEGER', mapping: {'file' => 1, 'dir' => 2}},
+      {key: :name,   name: 'name',   type: 'TEXT'},
+      {key: :size,   name: 'size',   type: 'INTEGER'},
+      {key: :mode,   name: 'mode',   type: 'TEXT'}, # even though it's an integer, we usually think of this as a string, since each character maps to user/group/other
+      {key: :mtime,  name: 'mtime',  type: 'INTEGER'},
+      {key: :owner,  name: 'own',    type: 'TEXT'},
+      {key: :group,  name: 'grp',    type: 'TEXT'},
+      {key: :sha256, name: 'sha256', type: 'TEXT'},
+      {key: :path,   name: 'path',   type: 'TEXT'},
+    ]
+
+    begin
+      # create the database file
+      db = SQLite3::Database.new output_file(:db_path)
+
+      # create table
+      columns_string = db_columns.map{|col| "#{col[:name]} #{col[:type]} #{col[:extra]}"}.join(", ")
+      sql = "CREATE TABLE IF NOT EXISTS files(#{columns_string})" 
+      # puts "sql: #{sql}"
+      db.execute sql
+    
+    rescue SQLite3::Exception => e 
+      puts "Exception occured"
+      puts e
+
+    ensure
+      db.close if db
+
+    end
+  end
+
   # exports a sqlite3 file from a binary index file
   def export_sqlite3(options = {})
     required_input_files :index_path

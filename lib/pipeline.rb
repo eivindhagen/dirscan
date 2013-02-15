@@ -119,12 +119,11 @@ class Worker
     end
   end
 
-  def output_value(sym, options = {})
+  def output_value(sym, value)
     if outputs[:values] && outputs[:values].key?(sym)
-      return outputs[:values][sym]
+      outputs[:values][sym] = value
     else
-      return options[:default] if options.key?(:default)
-      raise ArgumentError, "No value for outputs[:values][:#{sym}]"
+      raise ArgumentError, "The output_value '#{sym}' was not found"
     end
   end
 

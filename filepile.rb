@@ -1,11 +1,119 @@
 # filepile.rb
 
 require File.join(File.dirname(__FILE__), 'lib', 'hostinfo')
+require File.join(File.dirname(__FILE__), 'lib', 'file_worker')
 require File.join(File.dirname(__FILE__), 'lib', 'indexfile_worker')
 require File.join(File.dirname(__FILE__), 'lib', 'dirscan_worker')
 require File.join(File.dirname(__FILE__), 'lib', 'file_pile_worker')
 require File.join(File.dirname(__FILE__), 'lib', 'pipeline')
 require File.join(File.dirname(__FILE__), 'lib', 'file_pile_dir')
+
+def create_pipeline_for_sha256(path)
+  pipeline_config = {
+    jobs: {
+      sha256: { # read input path, generate output value
+        inputs: {
+          files: {
+            path: path,
+          }
+        },
+        outputs: {
+          values: {
+            sha256: nil,
+          },
+        },
+        worker: {
+          ruby_class: :FileWorker,
+          ruby_method: :sha256,
+        }
+      }
+
+    },
+
+    job_order: [:sha256],
+  }
+
+  return Pipeline.new(pipeline_config)
+end
+
+def create_pipeline_for_copy_file(src_path, dst_path)
+  pipeline_config = {
+    jobs: {
+      copy_file: { # read 2 input sqlite3 files, create a single sqlite3 output file
+        inputs: {
+          files: {
+            src_path: src_path,
+          }
+        },
+        outputs: {
+          files: {
+            dst_path: dst_path,
+          },
+        },
+        worker: {
+          ruby_class: :FileWorker,
+          ruby_method: :copy,
+        }
+      }
+
+    },
+
+    job_order: [:copy_file],
+  }
+
+  return Pipeline.new(pipeline_config)
+end
+
+def create_pipeline_for_move_file(src_path, dst_path)
+  pipeline_config = {
+    jobs: {
+      move_file: { # read 2 input sqlite3 files, create a single sqlite3 output file
+        inputs: {
+          files: {
+            src_path: src_path,
+          }
+        },
+        outputs: {
+          files: {
+            dst_path: dst_path,
+          },
+        },
+        worker: {
+          ruby_class: :FileWorker,
+          ruby_method: :move,
+        }
+      }
+
+    },
+
+    job_order: [:move_file],
+  }
+
+  return Pipeline.new(pipeline_config)
+end
+
+def create_pipeline_for_delete_file(dst_path)
+  pipeline_config = {
+    jobs: {
+      delete_file: { # read 2 input sqlite3 files, create a single sqlite3 output file
+        outputs: {
+          files: {
+            dst_path: dst_path,
+          },
+        },
+        worker: {
+          ruby_class: :FileWorker,
+          ruby_method: :delete,
+        }
+      }
+
+    },
+
+    job_order: [:delete_file],
+  }
+
+  return Pipeline.new(pipeline_config)
+end
 
 def create_pipeline_for_store(scan_root, filepile_root)
   filepile = FilePileDir.new(filepile_root)
@@ -228,6 +336,30 @@ def create_pipeline_for_export_sqlite3(index_path, db_path)
 end
 
 
+def create_pipeline_for_create_sqlite3(db_path)
+  pipeline_config = {
+    jobs: {
+      create_sqlite3: { # create an empty sqlite3 file
+        outputs: {
+          files: {
+            db_path: db_path,
+          },
+        },
+        worker: {
+          ruby_class: :IndexFileWorker,
+          ruby_method: :create_sqlite3,
+        }
+      }
+
+    },
+
+    job_order: [:create_sqlite3],
+  }
+
+  return Pipeline.new(pipeline_config)
+end
+
+
 def create_pipeline_for_merge_sqlite3(input1_path, input2_path, output_path)
   pipeline_config = {
     jobs: {
@@ -261,6 +393,13 @@ end
 # command line arguments
 command = ARGV[0]
 case command
+
+when 'sha256'
+  # calculate sha256 for a file
+  path = ARGV[1].split('\\').join('/')
+  pipeline = create_pipeline_for_sha256(path)
+  pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+  puts pipeline.config_for_job(:sha256).to_yaml
 
 when 'store'
   # store files in a filepile, by recursive scan of input folder
@@ -308,7 +447,7 @@ when 'export_sqlite3_all'
   filepile = FilePileDir.new(filepile_root)
 
   # process all *.store files
-  Dir[File.join(filepile.logs, '*.store')].sort.each do |full_path|  # sort is important for deterministic content hash
+  Dir[File.join(filepile.logs, '*.store')].sort.each do |full_path|
     sqlite3_path = full_path + '.sqlite3'
     pipeline = create_pipeline_for_export_sqlite3(full_path, sqlite3_path)
     pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
@@ -322,5 +461,37 @@ when 'merge_sqlite3'
 
   pipeline = create_pipeline_for_merge_sqlite3(input1_path, input2_path, output_path)
   pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+
+when 'merge_sqlite3_all'
+  # merge all sqlite3 databases (logs/*.sqlite3) into a single database (metadata/db.sqlite3)
+  filepile_root = ARGV[1].split('\\').join('/')
+
+  filepile = FilePileDir.new(filepile_root)
+  final_db_path = File.join filepile.metadata, 'db.sqlite3'
+  merge_db_path = File.join filepile.temp, 'db_merge.sqlite3'
+
+  # TODO: delete existing file, if necessary
+
+  # first create the final db file (empty)
+  pipeline = create_pipeline_for_create_sqlite3(final_db_path)
+  pipeline.run(Job)
+
+  # process all *.store files, merge each one into the final db
+  Dir[File.join(filepile.logs, '*.sqlite3')].sort.each do |full_path|
+    # merge into new file (temp)
+    puts "\nmerge into new file (temp)"
+    pipeline = create_pipeline_for_merge_sqlite3(final_db_path, full_path, merge_db_path)
+    pipeline.run(Job)
+
+    # delete old version of final
+    puts "\ndelete old version of final"
+    pipeline = create_pipeline_for_delete_file(final_db_path)
+    pipeline.run(Job)
+
+    # move merged (temp) to final
+    puts "\nmove merged (temp) to final"
+    pipeline = create_pipeline_for_move_file(merge_db_path, final_db_path)
+    pipeline.run(Job)
+  end
 
 end
