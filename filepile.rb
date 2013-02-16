@@ -377,7 +377,7 @@ def create_pipeline_for_merge_sqlite3(input1_path, input2_path, output_path)
         },
         worker: {
           ruby_class: :IndexFileWorker,
-          ruby_method: :merge_sqlite3,
+          ruby_method: :merge_sqlite3_fast,
         }
       }
 

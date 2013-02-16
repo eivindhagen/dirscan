@@ -68,10 +68,7 @@ class IndexFileWorker < Worker
 
   require 'sqlite3'
 
-  # creates an empty sqlite3 file
-  def create_sqlite3(options = {})
-    required_output_files :db_path
-
+  def create_files_table(db)
     db_columns = [
       {key: :id,     name: 'id',     type: 'INTEGER', extra: 'PRIMARY KEY'},
       {key: :type,   name: 'type',   type: 'INTEGER', mapping: {'file' => 1, 'dir' => 2}},
@@ -86,14 +83,28 @@ class IndexFileWorker < Worker
     ]
 
     begin
-      # create the database file
-      db = SQLite3::Database.new output_file(:db_path)
-
       # create table
       columns_string = db_columns.map{|col| "#{col[:name]} #{col[:type]} #{col[:extra]}"}.join(", ")
       sql = "CREATE TABLE IF NOT EXISTS files(#{columns_string})" 
       # puts "sql: #{sql}"
       db.execute sql
+    
+    rescue SQLite3::Exception => e 
+      puts "Exception occured"
+      puts e
+
+    end
+  end
+
+  # creates an empty sqlite3 file
+  def create_sqlite3(options = {})
+    required_output_files :db_path
+
+    begin
+      # create the database file
+      db = SQLite3::Database.new output_file(:db_path)
+
+      create_files_table(db)
     
     rescue SQLite3::Exception => e 
       puts "Exception occured"
@@ -193,7 +204,7 @@ class IndexFileWorker < Worker
     end # IndexFile::Reader
   end
 
-  # exports a sqlite3 file from a binary index file
+  # merge two sqlite3 databases and output a single sqlite3 database
   def merge_sqlite3(options = {})
     required_input_files :db_in1_path, :db_in2_path
     required_output_files :db_out_path
@@ -331,5 +342,129 @@ class IndexFileWorker < Worker
 
     end
   end
+
+
+  # merge two sqlite3 databases and output a single sqlite3 database
+  def merge_sqlite3_fast(options = {})
+    required_input_files :db_in1_path, :db_in2_path
+    required_output_files :db_out_path
+
+    db_in1_path = input_file(:db_in1_path)
+    db_in2_path = input_file(:db_in2_path)
+    db_out_path = output_file(:db_out_path)
+
+    # build a hash of all records, indexed by a checksum of the uniqueness attributes
+    uniqueness_attributes = %w[ type name size mode mtime own grp sha256 path ] # NOT id (just a sequence number)
+    unique_files = {}
+
+    #
+    # read both files and add files to the unique_files hash
+    #
+
+    db_columns_in_order = %w[ id type name size mode mtime own grp sha256 path ] # NOTE 'own' (not owner) and 'grp' (not group)
+    db_columns_info = {
+      'id'     => {type: :integer}, # 'id' will be handled in special ways (omitted in SELECT, rewritten in INSERT)
+      'type'   => {type: :integer},
+      'name'   => {type: :text},
+      'size'   => {type: :integer},
+      'mode'   => {type: :text},
+      'mtime'  => {type: :integer},
+      'own'    => {type: :text},
+      'grp'    => {type: :text},
+      'sha256' => {type: :text},
+      'path'   => {type: :text},
+    }
+
+    #
+    # read both files and add files to the unique_files hash
+    #
+
+    [db_in1_path, db_in2_path].each do |db_in_path|
+      begin
+        # open db_in_path so we can read from it
+        db_in = SQLite3::Database.open(db_in_path)
+        db_in.results_as_hash = true
+
+        # get all the records from db_in
+        sql = "SELECT * FROM files" 
+        # puts "sql: #{sql}"
+        in_rows = db_in.execute sql
+
+        # process each row, insert into unique_files hash unless the hash already contains that entry
+        in_rows.each do |in_row|
+          key_string = uniqueness_attributes.map{|attr| in_row[attr]}.join('+')
+          key = StringHash.sha256(key_string)
+          unless unique_files.key? key
+            # convert array to attr=>value hash
+            file_attributes = Hash[* uniqueness_attributes.map{|attr| [attr, in_row[attr]]}.flatten]
+            print 'I'
+            unique_files[key] = file_attributes
+          else
+            print '.'
+          end
+        end
+
+      rescue SQLite3::Exception => e 
+        puts "Exception occured"
+        puts e
+
+      ensure
+        db_in.close if db_in
+      end
+    end
+
+    #
+    # write the unique_files to db_out
+    #
+    begin
+
+      # create db_out so we can write to it
+      db_out = SQLite3::Database.new(db_out_path)
+      db_out.results_as_hash = true
+
+      create_files_table(db_out)
+
+      # start a transaction, so we can insert all rows in one large operations, which is MUCH faster
+      result = db_out.execute "BEGIN"
+
+      next_id = 1
+      unique_files.each do |key, file_attributes|
+        print 'W'
+        values_string = db_columns_in_order.map do |db_column|
+          file_attributes['id'] = next_id
+          next_id += 1
+
+          value = file_attributes[db_column]
+          db_column = db_columns_info[db_column]
+
+          case db_column[:type]
+          when :integer
+            "#{value}"  # integers are not quoted
+          when :text
+            escaped_value = value.gsub("'", "''") # single-quotes must be doubled in order to be properly understood by SQLite3
+            "'#{escaped_value}'" # strings ARE quoted
+          else
+            raise "Column type '#{db_column[:type]}' is not handled, yet..."
+          end
+        end.join(",")
+
+        sql = "INSERT INTO files VALUES(#{values_string})"
+        # puts "sql: #{sql}"
+        result = db_out.execute sql
+      end
+        
+    rescue SQLite3::Exception => e 
+      puts "Exception occured"
+      puts e.message
+      puts e.backtrace
+
+    ensure
+      # end the transaction
+      result = db_out.execute "COMMIT"
+
+      db_out.close if db_out
+
+    end
+  end # def merge_sqlite3_fast
 
 end
