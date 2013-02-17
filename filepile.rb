@@ -377,7 +377,7 @@ def create_pipeline_for_merge_sqlite3(input1_path, input2_path, output_path)
         },
         worker: {
           ruby_class: :IndexFileWorker,
-          ruby_method: :merge_sqlite3_fast,
+          ruby_method: :merge_sqlite3_hybrid,
         }
       }
 
@@ -390,108 +390,153 @@ def create_pipeline_for_merge_sqlite3(input1_path, input2_path, output_path)
 end
 
 
-# command line arguments
-command = ARGV[0]
-case command
+def create_pipeline_for_inspect_sqlite3(db_path)
+  pipeline_config = {
+    jobs: {
+      inspect_sqlite3: { # inspect a sqlite3 database
+        inputs: {
+          files: {
+            db_path: db_path,
+          }
+        },
+        outputs: {
+          values: {
+            files_count: nil,
+          },
+        },
+        worker: {
+          ruby_class: :IndexFileWorker,
+          ruby_method: :inspect_sqlite3,
+        }
+      }
 
-when 'sha256'
-  # calculate sha256 for a file
-  path = ARGV[1].split('\\').join('/')
-  pipeline = create_pipeline_for_sha256(path)
-  pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
-  puts pipeline.config_for_job(:sha256).to_yaml
+    },
 
-when 'store'
-  # store files in a filepile, by recursive scan of input folder
-  
-  # arg 1 is the location of the input files (should be a directory, will be scanned recursively)
-  scan_root = ARGV[1].split('\\').join('/')
-  # arg 2 is the location of the output filepile (it's root path, will be created if it does not exist)
-  filepile_root = ARGV[2].split('\\').join('/')
+    job_order: [:inspect_sqlite3],
+  }
 
-  pipeline = create_pipeline_for_store(scan_root, filepile_root)
-  pipeline.add_options(debug_level: :all)
-  pipeline.run(Job) # Use the 'Job' class to make it run even if the output folder exist
-
-when 'scan'
-  # scan a directory and generate scan_index, analysis, and reports
-  scan_root = ARGV[1].split('\\').join('/')
-  output_files_dir = ARGV[2].split('\\').join('/')
-
-  pipeline = create_pipeline_for_scan(scan_root, output_files_dir)
-  # pipeline.simulate(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
-  pipeline.run(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
-
-when 'export_csv'
-  # export CSV file from an index file
-  index_path = ARGV[1].split('\\').join('/')
-  csv_path = ARGV[2].split('\\').join('/')
-
-  pipeline = create_pipeline_for_export_csv(index_path, csv_path)
-  # pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
-  pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
-
-when 'export_sqlite3'
-  # export sqlite3 database from an index file
-  index_path = ARGV[1].split('\\').join('/')
-  db_path = ARGV[2].split('\\').join('/')
-
-  pipeline = create_pipeline_for_export_sqlite3(index_path, db_path)
-  # pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
-  pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
-
-when 'export_sqlite3_all'
-  # export sqlite3 database for all index files in the filepile's log directory
-  filepile_root = ARGV[1].split('\\').join('/')
-
-  filepile = FilePileDir.new(filepile_root)
-
-  # process all *.store files
-  Dir[File.join(filepile.logs, '*.store')].sort.each do |full_path|
-    sqlite3_path = full_path + '.sqlite3'
-    pipeline = create_pipeline_for_export_sqlite3(full_path, sqlite3_path)
-    pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
-  end
-
-when 'merge_sqlite3'
-  # merge two sqlite3 files, output a third file
-  input1_path = ARGV[1].split('\\').join('/')
-  input2_path = ARGV[2].split('\\').join('/')
-  output_path = ARGV[3].split('\\').join('/')
-
-  pipeline = create_pipeline_for_merge_sqlite3(input1_path, input2_path, output_path)
-  pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
-
-when 'merge_sqlite3_all'
-  # merge all sqlite3 databases (logs/*.sqlite3) into a single database (metadata/db.sqlite3)
-  filepile_root = ARGV[1].split('\\').join('/')
-
-  filepile = FilePileDir.new(filepile_root)
-  final_db_path = File.join filepile.metadata, 'db.sqlite3'
-  merge_db_path = File.join filepile.temp, 'db_merge.sqlite3'
-
-  # TODO: delete existing file, if necessary
-
-  # first create the final db file (empty)
-  pipeline = create_pipeline_for_create_sqlite3(final_db_path)
-  pipeline.run(Job)
-
-  # process all *.store files, merge each one into the final db
-  Dir[File.join(filepile.logs, '*.sqlite3')].sort.each do |full_path|
-    # merge into new file (temp)
-    puts "\nmerge into new file (temp)"
-    pipeline = create_pipeline_for_merge_sqlite3(final_db_path, full_path, merge_db_path)
-    pipeline.run(Job)
-
-    # delete old version of final
-    puts "\ndelete old version of final"
-    pipeline = create_pipeline_for_delete_file(final_db_path)
-    pipeline.run(Job)
-
-    # move merged (temp) to final
-    puts "\nmove merged (temp) to final"
-    pipeline = create_pipeline_for_move_file(merge_db_path, final_db_path)
-    pipeline.run(Job)
-  end
-
+  return Pipeline.new(pipeline_config)
 end
+
+
+def process_cmdline(args)
+  # command line arguments
+  command = args[0]
+  case command
+
+  when 'sha256'
+    # calculate sha256 for a file
+    path = args[1].split('\\').join('/')
+    pipeline = create_pipeline_for_sha256(path)
+    pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+    puts pipeline.config_for_job(:sha256).to_yaml
+
+  when 'store'
+    # store files in a filepile, by recursive scan of input folder
+    
+    # arg 1 is the location of the input files (should be a directory, will be scanned recursively)
+    scan_root = args[1].split('\\').join('/')
+    # arg 2 is the location of the output filepile (it's root path, will be created if it does not exist)
+    filepile_root = args[2].split('\\').join('/')
+
+    pipeline = create_pipeline_for_store(scan_root, filepile_root)
+    pipeline.add_options(debug_level: :all)
+    pipeline.run(Job) # Use the 'Job' class to make it run even if the output folder exist
+
+  when 'scan'
+    # scan a directory and generate scan_index, analysis, and reports
+    scan_root = args[1].split('\\').join('/')
+    output_files_dir = args[2].split('\\').join('/')
+
+    pipeline = create_pipeline_for_scan(scan_root, output_files_dir)
+    # pipeline.simulate(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
+    pipeline.run(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
+
+  when 'export_csv'
+    # export CSV file from an index file
+    index_path = args[1].split('\\').join('/')
+    csv_path = args[2].split('\\').join('/')
+
+    pipeline = create_pipeline_for_export_csv(index_path, csv_path)
+    # pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
+    pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+
+  when 'export_sqlite3'
+    # export sqlite3 database from an index file
+    index_path = args[1].split('\\').join('/')
+    db_path = args[2].split('\\').join('/')
+
+    pipeline = create_pipeline_for_export_sqlite3(index_path, db_path)
+    # pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
+    pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+
+  when 'export_sqlite3_all'
+    # export sqlite3 database for all index files in the filepile's log directory
+    filepile_root = args[1].split('\\').join('/')
+
+    filepile = FilePileDir.new(filepile_root)
+
+    # process all *.store files
+    Dir[File.join(filepile.logs, '*.store')].sort.each do |full_path|
+      sqlite3_path = full_path + '.sqlite3'
+      pipeline = create_pipeline_for_export_sqlite3(full_path, sqlite3_path)
+      pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
+    end
+
+  when 'merge_sqlite3'
+    # merge two sqlite3 files, output a third file
+    input1_path = args[1].split('\\').join('/')
+    input2_path = args[2].split('\\').join('/')
+    output_path = args[3].split('\\').join('/')
+
+    pipeline = create_pipeline_for_merge_sqlite3(input1_path, input2_path, output_path)
+    pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+
+  when 'merge_sqlite3_all'
+    # merge all sqlite3 databases (logs/*.sqlite3) into a single database (metadata/db.sqlite3)
+    filepile_root = args[1].split('\\').join('/')
+
+    filepile = FilePileDir.new(filepile_root)
+    final_db_path = File.join filepile.metadata, 'db.sqlite3'
+    merge_db_path = File.join filepile.temp, 'db_merge.sqlite3'
+
+    # TODO: delete existing file, if necessary
+
+    # first create the final db file (empty)
+    pipeline = create_pipeline_for_create_sqlite3(final_db_path)
+    pipeline.run(Job)
+
+    # process all *.store files, merge each one into the final db
+    Dir[File.join(filepile.logs, '*.sqlite3')].sort.each do |full_path|
+      # merge into new file (temp)
+      puts "\nmerge into new file (temp)"
+      pipeline = create_pipeline_for_merge_sqlite3(final_db_path, full_path, merge_db_path)
+      pipeline.run(Job)
+
+      # delete old version of final
+      puts "\ndelete old version of final"
+      pipeline = create_pipeline_for_delete_file(final_db_path)
+      pipeline.run(Job)
+
+      # move merged (temp) to final
+      puts "\nmove merged (temp) to final"
+      pipeline = create_pipeline_for_move_file(merge_db_path, final_db_path)
+      pipeline.run(Job)
+    end
+
+  when 'inspect_sqlite3'
+    # merge two sqlite3 files, output a third file
+    db_path = args[1].split('\\').join('/')
+
+    pipeline = create_pipeline_for_inspect_sqlite3(db_path)
+    pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+
+  end
+end
+
+start_time = Time.now
+process_cmdline(ARGV)
+end_time = Time.now
+
+delta_time = end_time - start_time
+puts "Total time: #{delta_time}"
