@@ -167,6 +167,34 @@ def create_pipeline_for_store(scan_root, filepile_root)
   return Pipeline.new(pipeline_config)
 end
 
+def create_pipeline_for_unpack(scan_index, scan_unpack)
+  pipeline_config = {
+    jobs: {
+      unpack: { # unpack the index file, writing a text version of the file
+        inputs: {
+          files: {
+            scan_index: scan_index,
+          }
+        },
+        outputs: {
+          files: {
+            scan_unpack: scan_unpack,
+          },
+        },
+        worker: {
+          ruby_class: :IndexFileWorker,
+          ruby_method: :unpack,
+        }
+      }
+
+    },
+
+    job_order: [:unpack],
+  }
+
+  return Pipeline.new(pipeline_config)
+end
+
 def create_pipeline_for_scan(scan_root, dst_files_dir)
   dirname = File.basename(scan_root)
 
@@ -443,6 +471,13 @@ def process_cmdline(args)
     pipeline.add_options(debug_level: :all)
     pipeline.run(Job) # Use the 'Job' class to make it run even if the output folder exist
 
+  when 'unpack'
+    # export CSV file from an index file
+    scan_index = args[1].split('\\').join('/')
+    scan_unpack = args[2].split('\\').join('/')
+
+    pipeline = create_pipeline_for_unpack(scan_index, scan_unpack)
+    pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
   when 'scan'
     # scan a directory and generate scan_index, analysis, and reports
     scan_root = args[1].split('\\').join('/')
@@ -478,9 +513,16 @@ def process_cmdline(args)
 
     # process all *.store files
     Dir[File.join(filepile.logs, '*.store')].sort.each do |full_path|
-      sqlite3_path = full_path + '.sqlite3'
-      pipeline = create_pipeline_for_export_sqlite3(full_path, sqlite3_path)
-      pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
+      begin
+        sqlite3_path = full_path + '.sqlite3'
+        puts "Exporting '#{full_path}' to '#{sqlite3_path}'"
+        pipeline = create_pipeline_for_export_sqlite3(full_path, sqlite3_path)
+        pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
+      rescue Exception => e
+        puts "Exception while exporting '#{full_path}' to '#{sqlite3_path}'"
+        puts e.message
+        puts e.backtrace
+      end
     end
 
   when 'merge_sqlite3'

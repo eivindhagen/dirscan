@@ -73,35 +73,104 @@ class IndexFileWorker < Worker
 
   require 'sqlite3'
 
-  def create_files_table(db)
-    db_columns = [
-      {key: :id,     name: 'id',     type: 'INTEGER', extra: 'PRIMARY KEY'},
-      {key: :type,   name: 'type',   type: 'INTEGER', mapping: {'file' => 1, 'dir' => 2}},
-      {key: :name,   name: 'name',   type: 'TEXT'},
-      {key: :size,   name: 'size',   type: 'INTEGER'},
-      {key: :mode,   name: 'mode',   type: 'TEXT'}, # even though it's an integer, we usually think of this as a string, since each character maps to user/group/other
-      {key: :mtime,  name: 'mtime',  type: 'INTEGER'},
-      {key: :owner,  name: 'own',    type: 'TEXT'},
-      {key: :group,  name: 'grp',    type: 'TEXT'},
-      {key: :sha256, name: 'sha256', type: 'TEXT'},
-      {key: :path,   name: 'path',   type: 'TEXT'},
-    ]
+  # 'files' table
 
-    # create table
-    columns_string = db_columns.map{|col| "#{col[:name]} #{col[:type]} #{col[:extra]}"}.join(", ")
-    sql = "CREATE TABLE IF NOT EXISTS files(#{columns_string})" 
-    # puts "sql: #{sql}"
+  def files_table_info
+    @files_table_info ||= {
+      table_name: 'files',
+
+      # columns in proper order (as SQLite3 knows them)
+      # NOTE 'own' (not owner) and 'grp' (not group)
+      columns: %w[ id type name size mode mtime own grp sha256 path ],
+
+      # column_info specifies the attribute name, type, value mapping etc.
+      # attr_name is the key used when fetching values from an index file (.store)
+      columns_info: {
+        'id'     => {attr_name: :id, type: :integer, primary_key: true}, # 'id' will be handled in special ways (omitted in SELECT, rewritten in INSERT)
+        'type'   => {attr_name: :type, type: :integer, mapping: {'file' => 1, 'dir' => 2}}, # mapping to convert from string to integer (integer in db)
+        'name'   => {attr_name: :name, type: :text},
+        'size'   => {attr_name: :size, type: :integer},
+        'mode'   => {attr_name: :mode, type: :text},
+        'mtime'  => {attr_name: :mtime, type: :integer},
+        'own'    => {attr_name: :owner, type: :text}, # owner -> own
+        'grp'    => {attr_name: :group, type: :text}, # group -> grp
+        'sha256' => {attr_name: :sha256, type: :text},
+        'path'   => {attr_name: :path, type: :text},
+      },
+    }
+  end
+
+  # create a given table
+  def create_table(db, table_info)
+    columns_string = table_info[:columns].map do |column|
+      column_info = table_info[:columns_info][column]
+      col_def = "#{column} #{column_info[:type].to_s.upcase}"
+      col_def += " PRIMARY KEY" if column_info[:primary_key]
+      col_def
+    end.join(", ")
+    table_name = table_info[:table_name]
+    sql = "CREATE TABLE IF NOT EXISTS #{table_name}(#{columns_string})" 
+    puts "sql: #{sql}"
     db.execute sql
   end
 
 
-  # count the number of rows in the 'files' table
-  def count_files(db)
-    # see how many rows are in the table
-    sql = "SELECT COUNT(*) FROM files" 
+  # count the number of rows in the given table
+  def count_rows(db, table_info)
+    table_name = table_info[:table_name]
+    sql = "SELECT COUNT(*) FROM #{table_name}" 
     count = db.execute(sql).first[0]
   end
 
+  def sql_value_string(value, type)
+    case type
+    when :integer
+      "#{value}"  # integers are not quoted
+    when :text
+      escaped_value = value.gsub("'", "''") # single-quotes must be doubled in order to be properly understood by SQLite3
+      "'#{escaped_value}'" # strings ARE quoted
+    else
+      raise "Column type '#{type}' is not handled, yet..."
+    end
+  end
+
+  # Insert a new row into a table, fetching the values from another row hash.
+  def insert_row(db, table_info, row_hash)
+    values_string = table_info[:columns].map do |column|
+      column_info = table_info[:columns_info][column]
+      
+      value = attributes_hash[attr_name]
+      
+      sql_value_string(value, column_info[:type])
+    end.join(",")
+
+    sql = "INSERT INTO files VALUES(#{values_string})"
+    # puts "sql: #{sql}"
+    db.execute sql
+  end
+
+  # Insert a new row into a table, fetching the values from an attribute hash. 
+  # The table_info knows which attributes map to which table column.
+  # The table_info may also contain mappings, so that values from the 
+  # attribute hash are mapped to different values in the table column
+  def insert_attributes(db, table_info, attributes_hash)
+    values_string = table_info[:columns].map do |column|
+      column_info = table_info[:columns_info][column]
+      attr_name = column_info[:attr_name]
+      
+      value = attributes_hash[attr_name]
+
+      if mapping = column_info[:mapping]
+        value = mapping[value]
+      end
+
+      sql_value_string(value, column_info[:type])
+    end.join(",")
+
+    sql = "INSERT INTO files VALUES(#{values_string})"
+    # puts "sql: #{sql}"
+    db.execute sql
+  end
 
   # array of all the attributes that make a row in the 'files' table unique (constraint)
   def files_uniqueness_attributes
@@ -159,11 +228,12 @@ class IndexFileWorker < Worker
       # create the database file
       db = SQLite3::Database.new output_file(:db_path)
 
-      create_files_table(db)
+      create_table(db, files_table_info)
     
     rescue SQLite3::Exception => e 
-      puts "Exception occured"
-      puts e
+      puts "SQLite3::Exception occured"
+      puts e.message
+      puts e.backtrace
 
     ensure
       db.close if db
@@ -179,12 +249,13 @@ class IndexFileWorker < Worker
       # create the database file
       db = SQLite3::Database.open input_file(:db_path)
 
-      files_count = count_files(db)
+      files_count = count_rows(db, files_table_info)
       puts "files_count: #{files_count}"
     
     rescue SQLite3::Exception => e 
-      puts "Exception occured"
-      puts e
+      puts "SQLite3::Exception occured"
+      puts e.message
+      puts e.backtrace
 
     ensure
       db.close if db
@@ -198,19 +269,19 @@ class IndexFileWorker < Worker
     required_output_files :db_path
 
     object_types_to_export = %w[ file symlink ]
-    columns_to_export = %w[ type name size mode mtime owner group sha256 path ].map{|col| col.to_sym} # we want symbols (not strings)
-    db_columns = [
-      {key: :id,     name: 'id',     type: 'INTEGER', extra: 'PRIMARY KEY'},
-      {key: :type,   name: 'type',   type: 'INTEGER', mapping: {'file' => 1, 'dir' => 2}},
-      {key: :name,   name: 'name',   type: 'TEXT'},
-      {key: :size,   name: 'size',   type: 'INTEGER'},
-      {key: :mode,   name: 'mode',   type: 'TEXT'}, # even though it's an integer, we usually think of this as a string, since each character maps to user/group/other
-      {key: :mtime,  name: 'mtime',  type: 'INTEGER'},
-      {key: :owner,  name: 'own',    type: 'TEXT'},
-      {key: :group,  name: 'grp',    type: 'TEXT'},
-      {key: :sha256, name: 'sha256', type: 'TEXT'},
-      {key: :path,   name: 'path',   type: 'TEXT'},
-    ]
+    # columns_to_export = %w[ type name size mode mtime owner group sha256 path ].map{|col| col.to_sym} # we want symbols (not strings)
+    # db_columns = [
+    #   {key: :id,     name: 'id',     type: 'INTEGER', extra: 'PRIMARY KEY'},
+    #   {key: :type,   name: 'type',   type: 'INTEGER', mapping: {'file' => 1, 'dir' => 2}},
+    #   {key: :name,   name: 'name',   type: 'TEXT'},
+    #   {key: :size,   name: 'size',   type: 'INTEGER'},
+    #   {key: :mode,   name: 'mode',   type: 'TEXT'}, # even though it's an integer, we usually think of this as a string, since each character maps to user/group/other
+    #   {key: :mtime,  name: 'mtime',  type: 'INTEGER'},
+    #   {key: :owner,  name: 'own',    type: 'TEXT'},
+    #   {key: :group,  name: 'grp',    type: 'TEXT'},
+    #   {key: :sha256, name: 'sha256', type: 'TEXT'},
+    #   {key: :path,   name: 'path',   type: 'TEXT'},
+    # ]
 
     last_dir = nil
 
@@ -218,12 +289,13 @@ class IndexFileWorker < Worker
     IndexFile::Reader.new(input_file(:index_path)) do |index_file|
       begin
         # create the database file
-        db = SQLite3::Database.new output_file(:db_path)
+        db_out = SQLite3::Database.new(output_file(:db_path))
 
-        create_files_table(db)
+        create_table(db_out, files_table_info)
+
+        db_out.execute "BEGIN" # start transactions, for better performance
 
         record_id = 1
-
         while not index_file.eof? do
           object = index_file.read_object
 
@@ -232,45 +304,28 @@ class IndexFileWorker < Worker
             last_dir = object
           end
 
-          # write to CSV file
+          # write to sqlite3 database
           if object_types_to_export.include? object[:type]
-            # set a sequential record id
-            object[:id] = record_id
-            record_id += 1
 
             # the path comes from the more recent 'dir' entry
             object[:path] = last_dir[:path]
 
-            values_string = db_columns.map do |db_column|
-              key = db_column[:key]
-              value = object[key]
-              if mapping = db_column[:mapping]
-                value = mapping[value]
-              end
-              case db_column[:type]
-              when 'INTEGER'
-                "#{value}"  # integers are not quoted
-              when 'TEXT'
-                escaped_value = value.gsub("'", "''") # single-quotes must be doubled in order to be properly understood by SQLite3
-                "'#{escaped_value}'" # strings ARE quoted
-              else
-                raise "Column type '#{db_column[:type]}' is not handled, yet..."
-              end
-            end.join(",")
-
-            sql = "INSERT INTO files VALUES(#{values_string})"
-            # puts "sql: #{sql}"
-            db.execute sql
+            # merge in the sequential record id
+            insert_attributes(db_out, files_table_info, object.merge(id: record_id))
+            record_id += 1 # increment for next record
           end
           
         end # while
+        db_out.execute "COMMIT" # commit transactions, for better performance
+        puts "record_id after last write: #{record_id}"
       
       rescue SQLite3::Exception => e 
-        puts "Exception occured"
-        puts e
+        puts "SQLite3::Exception occured"
+        puts e.message
+        puts e.backtrace
 
       ensure
-        db.close if db
+        db_out.close if db_out
 
       end
     end # IndexFile::Reader
@@ -383,29 +438,9 @@ class IndexFileWorker < Worker
       
         # if in_row does not exist in db_out, then instert it into db_out
         if exist_count == 0
+          insert_row(db, files_table_info, in_row.merge({'id' => next_id}))
+          next_id += 1
           num_added += 1
-          values_string = db_columns_in_order.map do |field|
-            value = in_row[field]
-            db_column = db_columns_info[field]
-
-            case db_column[:type]
-            when :integer
-              if 'id' == field
-                value = next_id   # give the record a new 'id' for it's place in db_out
-                next_id += 1      # increment for next record
-              end
-              "#{value}"  # integers are not quoted
-            when :text
-              escaped_value = value.gsub("'", "''") # single-quotes must be doubled in order to be properly understood by SQLite3
-              "'#{escaped_value}'" # strings ARE quoted
-            else
-              raise "Column type '#{db_column[:type]}' is not handled, yet..."
-            end
-          end.join(",")
-
-          sql = "INSERT INTO files VALUES(#{values_string})"
-          # puts "sql: #{sql}"
-          result = db_out.execute sql
         else
           num_skipped += 1
         end
@@ -416,8 +451,9 @@ class IndexFileWorker < Worker
       puts "num_skipped: #{num_skipped}"
 
     rescue SQLite3::Exception => e 
-      puts "Exception occured"
-      puts e
+      puts "SQLite3::Exception occured"
+      puts e.message
+      puts e.backtrace
 
     ensure
       db_in.close if db_in
@@ -518,29 +554,10 @@ class IndexFileWorker < Worker
         # if in_row does not exist in db_out, then instert it into db_out
         unless unique_files.key? key_string
           unique_files[key_string] = create_hash_for_files_row(in_row)
+
+          insert_row(db, files_table_info, in_row.merge({'id' => next_id}))
+          next_id += 1
           num_added += 1
-          values_string = db_columns_in_order.map do |field|
-            value = in_row[field]
-            db_column = db_columns_info[field]
-
-            case db_column[:type]
-            when :integer
-              if 'id' == field
-                value = next_id   # give the record a new 'id' for it's place in db_out
-                next_id += 1      # increment for next record
-              end
-              "#{value}"  # integers are not quoted
-            when :text
-              escaped_value = value.gsub("'", "''") # single-quotes must be doubled in order to be properly understood by SQLite3
-              "'#{escaped_value}'" # strings ARE quoted
-            else
-              raise "Column type '#{db_column[:type]}' is not handled, yet..."
-            end
-          end.join(",")
-
-          sql = "INSERT INTO files VALUES(#{values_string})"
-          # puts "sql: #{sql}"
-          result = db_out.execute sql
         else
           num_skipped += 1
         end
@@ -551,8 +568,9 @@ class IndexFileWorker < Worker
       puts "num_skipped: #{num_skipped}"
 
     rescue SQLite3::Exception => e 
-      puts "Exception occured"
-      puts e
+      puts "SQLite3::Exception occured"
+      puts e.message
+      puts e.backtrace
 
     ensure
       db_in.close if db_in
@@ -616,12 +634,11 @@ class IndexFileWorker < Worker
 
         # process each row, insert into unique_files hash unless the hash already contains that entry
         in_rows.each do |in_row|
-          key_string = uniqueness_attributes.map{|attr| in_row[attr]}.join('+')
-          key = StringHash.sha256(key_string)
-          unless unique_files.key? key
-            # convert array to attr=>value hash
-            file_attributes = Hash[* uniqueness_attributes.map{|attr| [attr, in_row[attr]]}.flatten]
-            unique_files[key] = file_attributes
+          # wipe out the 'id' since it's not part of the uniqueness constraints
+          in_row['id'] = nil
+          key_string = uniqueness_attributes.map{|attr| in_row[attr].to_s}.join('+')
+          unless unique_files.key? key_string
+            unique_files[key_string] = in_row
             num_added += 1
           else
             num_skipped += 1
@@ -631,8 +648,9 @@ class IndexFileWorker < Worker
         puts "files skipped: #{num_skipped}"
 
       rescue SQLite3::Exception => e 
-        puts "Exception occured"
-        puts e
+        puts "SQLite3::Exception occured"
+        puts e.message
+        puts e.backtrace
 
       ensure
         db_in.close if db_in
@@ -648,40 +666,21 @@ class IndexFileWorker < Worker
       db_out = SQLite3::Database.new(db_out_path)
       db_out.results_as_hash = true
 
-      create_files_table(db_out)
+      create_table(db_out, files_table_info)
 
       # start a transaction, so we can insert all rows in one large operations, which is MUCH faster
       result = db_out.execute "BEGIN"
 
       puts "file records to write: #{unique_files.count}"
       next_id = 1
-      unique_files.each do |key, file_attributes|
-        values_string = db_columns_in_order.map do |db_column|
-          file_attributes['id'] = next_id
-          next_id += 1
-
-          value = file_attributes[db_column]
-          db_column = db_columns_info[db_column]
-
-          case db_column[:type]
-          when :integer
-            "#{value}"  # integers are not quoted
-          when :text
-            escaped_value = value.gsub("'", "''") # single-quotes must be doubled in order to be properly understood by SQLite3
-            "'#{escaped_value}'" # strings ARE quoted
-          else
-            raise "Column type '#{db_column[:type]}' is not handled, yet..."
-          end
-        end.join(",")
-
-        sql = "INSERT INTO files VALUES(#{values_string})"
-        # puts "sql: #{sql}"
-        result = db_out.execute sql
+      unique_files.each do |key, in_row|
+        insert_row(db, files_table_info, in_row.merge({'id' => next_id}))
+        next_id += 1
       end
       puts "next_id after last write: #{next_id}"
         
     rescue SQLite3::Exception => e 
-      puts "Exception occured"
+      puts "SQLite3::Exception occured"
       puts e.message
       puts e.backtrace
 
