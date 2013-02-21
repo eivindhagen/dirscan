@@ -17,8 +17,14 @@ class IndexFile
 
     def read_object()
       length = BinData::Int32be.new.read(@file)
-      string = @file.read(length).force_encoding("UTF-8")
-      object = JSON.parse(string)
+      string = @file.read(length)
+      # puts string.encoding
+      utf8_string = string.force_encoding(Encoding::UTF_8)
+      # puts string
+      # puts utf8_string.encoding
+      # puts utf8_string
+      object = JSON.parse(utf8_string)
+      # puts JSON.pretty_generate(object)
       object.symbolize_keys
       object[:recursive].symbolize_keys if object[:recursive]
       return object
@@ -37,14 +43,10 @@ class IndexFile
       end
     end
 
-    # BUG: Is the object contains strings with multi-byte characters, then
-    # the integer written using BinData will not match the actual number of bytes
-    # written to the file. The integer will be less than the true size, because
-    # String.size returns the number of CHARACTERS, not the number of BYTES.
     def write_object(object)
       string = object.to_json
-      length = string.size
-      BinData::Int32be.new(length).write(@file)
+      num_bytes = string.bytesize
+      BinData::Int32be.new(num_bytes).write(@file)
       @file.write string
     end
 

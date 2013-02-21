@@ -57,7 +57,7 @@ class FilePileWorker < Worker
 
       # scan recursively
       @scan_result = scan_recursive(index_file, scan_info, scan_root) do |path, info|
-        puts "block: info[:type]=#{info[:type]}"
+        # puts "block: info[:type]=#{info[:type]}"
         case info[:type]
         when :file
           # copy this file to the FilePile area, using the sha256 checksum as the filename

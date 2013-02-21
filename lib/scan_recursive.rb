@@ -58,7 +58,7 @@ def scan_recursive(index_file, scan_info, path, &block)
   #
   Dir[File.join(base_path, '{*,.*}')].sort.each do |full_path|  # sort is important for deterministic content hash
                                                                 # for the entire dir
-    puts "scan: #{full_path}"
+    # puts "scan: #{full_path}"
     pathinfo = PathInfo.new(full_path)
     name = Pathname.new(full_path).relative_path_from(base_path).to_s # .to_s converts from Pathname to actual string
     case name

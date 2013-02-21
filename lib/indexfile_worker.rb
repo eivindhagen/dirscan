@@ -18,8 +18,11 @@ class IndexFileWorker < Worker
 
     # read the index file
     IndexFile::Reader.new(input_file(:scan_index)) do |index_file|
-      # write the text file
-      File.open(output_file(:scan_unpack), 'w') do |unpack_file|
+      # write the text file (UTF-8 encoding)
+      options = {
+        external_encoding: Encoding::UTF_8,
+      }
+      File.open(output_file(:scan_unpack), 'w', options) do |unpack_file|
         while not index_file.eof? do
           object = index_file.read_object
           unpack_file.write(JSON.pretty_generate(object) + "\n")
