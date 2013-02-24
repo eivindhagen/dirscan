@@ -478,6 +478,27 @@ def process_cmdline(args)
 
     pipeline = create_pipeline_for_unpack(scan_index, scan_unpack)
     pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+
+  when 'unpack_all'
+    # unoack all .store files in the filepile's log directory
+    filepile_root = args[1].split('\\').join('/')
+
+    filepile = FilePileDir.new(filepile_root)
+
+    # process all *.store files
+    Dir[File.join(filepile.logs, '*.store')].sort.each do |full_path|
+      begin
+        unpack_path = full_path + '.json'
+        puts "Unpacking '#{full_path}' to '#{unpack_path}'"
+        pipeline = create_pipeline_for_unpack(full_path, unpack_path)
+        pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
+      rescue Exception => e
+        puts "Exception while unpacking '#{full_path}' to '#{unpack_path}'"
+        puts e.message
+        puts e.backtrace
+      end
+    end
+
   when 'scan'
     # scan a directory and generate scan_index, analysis, and reports
     scan_root = args[1].split('\\').join('/')
