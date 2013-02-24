@@ -517,6 +517,26 @@ def process_cmdline(args)
     # pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
     pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
 
+  when 'export_csv_all'
+    # export csv file for all index files in the filepile's log directory
+    filepile_root = args[1].split('\\').join('/')
+
+    filepile = FilePileDir.new(filepile_root)
+
+    # process all *.store files
+    Dir[File.join(filepile.logs, '*.store')].sort.each do |full_path|
+      begin
+        csv_path = full_path + '.csv'
+        puts "Exporting '#{full_path}' to '#{csv_path}'"
+        pipeline = create_pipeline_for_export_csv(full_path, csv_path)
+        pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
+      rescue Exception => e
+        puts "Exception while exporting '#{full_path}' to '#{csv_path}'"
+        puts e.message
+        puts e.backtrace
+      end
+    end
+
   when 'export_sqlite3'
     # export sqlite3 database from an index file
     index_path = args[1].split('\\').join('/')
@@ -561,13 +581,13 @@ def process_cmdline(args)
 
     filepile = FilePileDir.new(filepile_root)
     final_db_path = File.join filepile.metadata, 'db.sqlite3'
-    merge_db_path = File.join filepile.temp, 'db_merge.sqlite3'
+    merge_db_path = File.join filepile.temp, 'db_merge.sqlite3' # TODO: avoid collisions here
 
-    # TODO: delete existing file, if necessary
-
-    # first create the final db file (empty)
-    pipeline = create_pipeline_for_create_sqlite3(final_db_path)
-    pipeline.run(Job)
+    # create empty final db if none exist already
+    unless File.exist? final_db_path
+      pipeline = create_pipeline_for_create_sqlite3(final_db_path)
+      pipeline.run(Job)
+    end
 
     # process all *.store files, merge each one into the final db
     Dir[File.join(filepile.logs, '*.sqlite3')].sort.each do |full_path|
@@ -588,7 +608,7 @@ def process_cmdline(args)
     end
 
   when 'inspect_sqlite3'
-    # merge two sqlite3 files, output a third file
+    # inspect a sqlite3 database
     db_path = args[1].split('\\').join('/')
 
     pipeline = create_pipeline_for_inspect_sqlite3(db_path)
