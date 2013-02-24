@@ -74,6 +74,11 @@ class FileWorker < Worker
     end
     FileUtils.rm_rf(dst_path)
 
+    # make sure dst_path was destroyed
+    if File.exist?(dst_path)
+      raise "Unable to delete #{dst_path}, not sure why. Sorry..."
+    end
+
     return true
   end
   
