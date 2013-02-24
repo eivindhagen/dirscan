@@ -374,13 +374,109 @@ class IndexFileWorker < Worker
 
   require "benchmark"
  
+  # diff two sqlite3 databases and report the differences & commonalities
+  #
+  # Performance profile:
+  # - TODO
+  def diff_sqlite3(options = {})
+    required_input_values :diff_operation
+    required_input_files :db_in1_path, :db_in2_path
+    required_output_files :db_out_path
+
+    diff_operation = input_value(:diff_operation)
+    unless ['unique', 'common'].include? diff_operation
+      raise "Unknown diff operation '#{diff_operation}'"
+    end
+
+    db_in1_path = input_file(:db_in1_path)
+    db_in2_path = input_file(:db_in2_path)
+    db_out_path = output_file(:db_out_path)
+
+    db_in1 = nil
+    db_in2 = nil
+    db_out = nil
+
+    begin
+      # open db_in_small so we can read from it
+      db_in1 = SQLite3::Database.open(db_in1_path)
+      db_in1.results_as_hash = true
+
+      # open db_in2 so we can read from it
+      db_in2 = SQLite3::Database.open(db_in2_path)
+      db_in2.results_as_hash = true
+
+      # open db_out so we can write from it
+      db_out = SQLite3::Database.new(db_out_path)
+      db_out.results_as_hash = true
+      # create table in out_db
+      create_table(db_out, files_table_info)
+
+      # see how many rows are in the 'files' table of each db
+      db_in1_count = count_rows(db_in1, files_table_info)
+      db_in2_count = count_rows(db_in2, files_table_info)
+      puts "db_in1 has #{db_in1_count} rows"
+      puts "db_in2 has #{db_in2_count} rows"
+
+      # get all the records from db_in1
+      sql = "SELECT * FROM files" 
+      in1_rows = db_in1.execute sql
+      puts "rows to diff: #{in1_rows.count}"
+      num_unique = 0
+      num_common = 0
+
+      db_out.execute "BEGIN" # start transactions (for better performance)
+      next_id = 1
+
+      in1_rows.each do |in1_row|
+        # see if the in1_row exists in db_in2
+        # exist_count = false
+
+        # time = Benchmark.measure do
+          exist_count = count_where_row(db_in2, files_table_info, in1_row)
+        # end
+        # puts "time = #{time}"
+
+        # if in_row does not exist in db_out, then instert it into db_out
+        if exist_count == 0
+          if 'unique' == diff_operation
+            insert_row(db_out, files_table_info, in1_row.merge({'id' => next_id}))
+            next_id += 1
+          end
+          num_unique += 1
+        else
+          if 'common' == diff_operation
+            insert_row(db_out, files_table_info, in1_row.merge({'id' => next_id}))
+            next_id += 1
+          end
+          num_common += 1
+        end
+      end
+
+      db_out.execute "COMMIT" # commit transactions (for better performance)
+      puts "num_unique: #{num_unique}"
+      puts "num_common: #{num_common}"
+
+    rescue SQLite3::Exception => e 
+      puts "SQLite3::Exception occured"
+      puts e.message
+      puts e.backtrace
+
+    ensure
+      db_in1.close if db_in1
+      db_in2.close if db_in2
+      db_out.close if db_out
+
+    end
+  end
+
+
   # merge two sqlite3 databases and output a single sqlite3 database
   # uses that largest database as the startign point, then adds only new records from the smaller db to the larger one
   #
   # Performance profile:
-  # - Slow, because identification of existing (duplicate) records is done using SQL SELECT statement
+  # - Fast, because SQL SELECT is fast when there is an INDEX on the 'files' table
   # - Uses very little memory, because records are processed and then forgotten, it's the DB's job to find duplicates for us (and that's why it's slow)
-  # - Suitable for when the combined size of the in_db's is larger than available memory, especially if one in_db is very large and the other in_db is very small
+  # - Suitable for all cases, and especially if one in_db is very large and the other in_db is very small
   def merge_sqlite3(options = {})
     required_input_files :db_in1_path, :db_in2_path
     required_output_files :db_out_path
@@ -411,6 +507,10 @@ class IndexFileWorker < Worker
       db_in = SQLite3::Database.open(db_in_small_path)
       db_in.results_as_hash = true
 
+      # open db_in_large so we can read from it (to check if a record already exist or not)
+      db_in_large = SQLite3::Database.open(db_in_large_path)
+      db_in_large.results_as_hash = true
+
       # open db_out so we can write to it
       db_out = SQLite3::Database.open(db_out_path)
       db_out.results_as_hash = true
@@ -440,12 +540,7 @@ class IndexFileWorker < Worker
       next_id = db_out_id_max + 1
       in_rows.each do |in_row|
         # see if the in_row already exists in db_out
-        exist_count = false
-
-        time = Benchmark.measure do
-          exist_count = count_where_row(db_out, files_table_info, in_row)
-        end
-        # puts "time = #{time}"
+        exist_count = count_where_row(db_in_large, files_table_info, in_row)
 
         # if in_row does not exist in db_out, then instert it into db_out
         if exist_count == 0
@@ -468,6 +563,7 @@ class IndexFileWorker < Worker
 
     ensure
       db_in.close if db_in
+      db_in_large.close if db_in_large
       db_out.close if db_out
 
     end

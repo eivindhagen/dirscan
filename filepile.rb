@@ -388,6 +388,39 @@ def create_pipeline_for_create_sqlite3(db_path)
 end
 
 
+def create_pipeline_for_diff_sqlite3(diff_operation, input1_path, input2_path, output_path)
+  pipeline_config = {
+    jobs: {
+      diff_sqlite3: { # read 2 input sqlite3 files, output subset of input1 that is either unique or in common with input2 (selected by diff_operation)
+        inputs: {
+          values:{
+            diff_operation: diff_operation,
+          },
+          files: {
+            db_in1_path: input1_path,
+            db_in2_path: input2_path,
+          },
+        },
+        outputs: {
+          files: {
+            db_out_path: output_path,
+          },
+        },
+        worker: {
+          ruby_class: :IndexFileWorker,
+          ruby_method: :diff_sqlite3,
+        },
+      }
+
+    },
+
+    job_order: [:diff_sqlite3],
+  }
+
+  return Pipeline.new(pipeline_config)
+end
+
+
 def create_pipeline_for_merge_sqlite3(input1_path, input2_path, output_path)
   pipeline_config = {
     jobs: {
@@ -405,7 +438,7 @@ def create_pipeline_for_merge_sqlite3(input1_path, input2_path, output_path)
         },
         worker: {
           ruby_class: :IndexFileWorker,
-          ruby_method: :merge_sqlite3_hybrid,
+          ruby_method: :merge_sqlite3,
         }
       }
 
@@ -565,6 +598,16 @@ def process_cmdline(args)
         puts e.backtrace
       end
     end
+
+  when 'diff_sqlite3'
+    # diff two sqlite3 files, output the subset of records from input1 that is either unique or in common with input2 (as selected by diff_operation)
+    diff_operation = args[1] # 'unique' or 'common'
+    input1_path = args[2].split('\\').join('/')
+    input2_path = args[3].split('\\').join('/')
+    output_path = args[4].split('\\').join('/')
+
+    pipeline = create_pipeline_for_diff_sqlite3(diff_operation, input1_path, input2_path, output_path)
+    pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
 
   when 'merge_sqlite3'
     # merge two sqlite3 files, output a third file
