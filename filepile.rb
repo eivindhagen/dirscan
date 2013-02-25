@@ -198,13 +198,13 @@ end
 def create_pipeline_for_scan(scan_root, dst_files_dir)
   dirname = File.basename(scan_root)
 
-  scan_index = File.join dst_files_dir, "#{dirname}.dirscan"
-  scan_unpack = File.join dst_files_dir, "#{dirname}.dirscan.unpack"
-  analysis = File.join dst_files_dir, "#{dirname}.dirscan.analysis"
-  analysis_report = File.join dst_files_dir, "#{dirname}.dirscan.analysis.report"
-  iddupe_files = File.join dst_files_dir, "#{dirname}.dirscan.analysis.iddupe_files"
-  sha256_cache = File.join dst_files_dir, "#{dirname}.dirscan.sha256_cache"
-  iddupe_files_report = File.join dst_files_dir, "#{dirname}.dirscan.analysis.iddupe_files.report"
+  scan_index = File.join dst_files_dir, "#{dirname}.scan"
+  sha256_cache = "#{scan_index}.sha256_cache"
+  scan_unpack = "#{scan_index}.unpack"
+  analysis = "#{scan_index}.analysis"
+  analysis_report = "#{analysis}.report"
+  iddupe_files = "#{analysis_report}.iddupe_files"
+  iddupe_files_report = "#{iddupe_files}.report"
 
   pipeline_config = {
     jobs: {
@@ -245,7 +245,7 @@ def create_pipeline_for_scan(scan_root, dst_files_dir)
         }
       },
 
-      analyze: { # analyze the directory scan to identify which file sizes may contain duplicates (same-size is step 1 in finding dupes)
+      analysis: { # analysis of the directory scan to identify which file sizes may contain duplicates (same-size is step 1 in finding dupes)
         inputs: {
           files: {
             scan_index: scan_index,
@@ -259,6 +259,23 @@ def create_pipeline_for_scan(scan_root, dst_files_dir)
         worker: {
           ruby_class: :DirScanWorker,
           ruby_method: :analyze,
+        }
+      },
+
+      analysis_report: { # generate report from analyze
+        inputs: {
+          files: {
+            analysis: analysis,
+          },
+        },
+        outputs: {
+          files: {
+            analysis_report: analysis_report,
+          },
+        },
+        worker: {
+          ruby_class: :DirScanWorker,
+          ruby_method: :analysis_report,
         }
       },
 
@@ -300,7 +317,7 @@ def create_pipeline_for_scan(scan_root, dst_files_dir)
       },
     },
 
-    job_order: [:scan, :unpack, :analyze, :iddupe_files, :iddupe_files_report],
+    job_order: [:scan, :unpack, :analysis, :analysis_report, :iddupe_files, :iddupe_files_report],
   }
 
   return Pipeline.new(pipeline_config)
@@ -539,7 +556,7 @@ def process_cmdline(args)
 
     pipeline = create_pipeline_for_scan(scan_root, output_files_dir)
     # pipeline.simulate(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
-    pipeline.run(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
+    pipeline.run(DependencyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
 
   when 'export_csv'
     # export CSV file from an index file

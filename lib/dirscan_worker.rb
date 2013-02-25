@@ -235,13 +235,21 @@ class DirScanWorker < Worker
     required_output_files :analysis_report
 
     analysis = File.open(input_file(:analysis)){|f| JSON.load(f)}
+
     file_sizes = analysis['file_sizes']
     sorted_file_sizes = file_sizes.keys.map{|key| key.to_i}.sort
-    sizes_with_counts = sorted_file_sizes.map{|size| [size, file_sizes["#{size}"]]}
-    sorted_by_count = sizes_with_counts.sort{|a,b| b[1] <=> a[1]}
+    file_sizes_with_counts = sorted_file_sizes.map{|size| [size, file_sizes["#{size}"]]}
+    file_sizes_sorted_by_count = file_sizes_with_counts.sort{|a,b| b[1] <=> a[1]}
+
+    dir_sizes = analysis['dir_sizes']
+    sorted_dir_sizes = dir_sizes.keys.map{|key| key.to_i}.sort
+    dir_sizes_with_counts = sorted_dir_sizes.map{|size| [size, dir_sizes["#{size}"]]}
+    dir_sizes_sorted_by_count = dir_sizes_with_counts.sort{|a,b| b[1] <=> a[1]}
+
     report = {
-      # sorted_file_sizes: sizes_with_counts,
-      sorted_by_count: sorted_by_count,
+      # sorted_file_sizes: file_sizes_with_counts,
+      file_sizes_sorted_by_count: file_sizes_sorted_by_count,
+      dir_sizes_sorted_by_count: dir_sizes_sorted_by_count,
     }
 
     # write the text file

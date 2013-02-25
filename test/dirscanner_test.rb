@@ -177,7 +177,7 @@ class TestDirScanWorker < Test::Unit::TestCase
     outputs = {files: {analysis_report: 'tmp/one_file_quick.dirscan.analysis.report'}}
     ds = DirScanWorker.new(inputs, outputs)
     analysis_report = ds.analysis_report
-    assert_equal({:sorted_by_count=>[[3, 1]]}, analysis_report)
+    assert_equal({:file_sizes_sorted_by_count=>[[3, 1]]}, analysis_report)
 
     # iddupe_files - uses analysis to find exact duplicate files
     inputs = {
@@ -230,7 +230,7 @@ class TestDirScanWorker < Test::Unit::TestCase
     outputs = {files: {:analysis_report => 'tmp/nested1_mixed.dirscan.analysis.report'}}
     ds = DirScanWorker.new(inputs, outputs)
     analysis_report = ds.analysis_report
-    assert_equal({:sorted_by_count=>[[0, 4], [12, 3], [50, 3], [5, 2]]}, analysis_report)
+    assert_equal({:file_sizes_sorted_by_count=>[[0, 4], [12, 3], [50, 3], [5, 2]]}, analysis_report)
 
     # iddupe_files - uses analysis to find exact duplicate files
     inputs = {
