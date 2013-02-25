@@ -167,6 +167,58 @@ def create_pipeline_for_store(scan_root, filepile_root)
   return Pipeline.new(pipeline_config)
 end
 
+def create_pipeline_for_store_update(scan_root, filepile_root)
+  filepile = FilePileDir.new(filepile_root)
+
+  timestamp = Time.now.to_i
+  checksum = StringHash.md5(HostInfo.name + scan_root + filepile_root) # make it unique to avoid file name collisions
+  scan_index = File.join filepile.logs, "#{timestamp}_#{checksum}.storeupdate"
+  scan_unpack = scan_index + '.json'
+
+  pipeline_config = {
+    jobs: {
+      store_update: { # scan a directory and store each file in the filepile system, but ignore any file that is already in the filepile
+        inputs: {
+          files: {
+            scan_root: scan_root,
+          }
+        },
+        outputs: {
+          files: {
+            filepile_root: filepile_root,
+            scan_index: scan_index,
+          },
+        },
+        worker: {
+          ruby_class: :FilePileWorker,
+          ruby_method: :store_update,
+        }
+      },
+      unpack: { # unpack the index file, writing a text version of the file
+        inputs: {
+          files: {
+            scan_index: scan_index,
+          }
+        },
+        outputs: {
+          files: {
+            scan_unpack: scan_unpack,
+          },
+        },
+        worker: {
+          ruby_class: :IndexFileWorker,
+          ruby_method: :unpack,
+        }
+      }
+
+    },
+
+    job_order: [:store_update, :unpack],
+  }
+
+  return Pipeline.new(pipeline_config)
+end
+
 def create_pipeline_for_unpack(scan_index, scan_unpack)
   pipeline_config = {
     jobs: {
@@ -518,6 +570,19 @@ def process_cmdline(args)
     filepile_root = args[2].split('\\').join('/')
 
     pipeline = create_pipeline_for_store(scan_root, filepile_root)
+    pipeline.add_options(debug_level: :all)
+    pipeline.run(Job) # Use the 'Job' class to make it run even if the output folder exist
+
+  when 'store_update'
+    # store new & modified files in a filepile, by recursive scan of input folder
+    # this is faster than storing everything, as it avoids generating metadata for files that are already in the filepile
+    
+    # arg 1 is the location of the input files (should be a directory, will be scanned recursively)
+    scan_root = args[1].split('\\').join('/')
+    # arg 2 is the location of the output filepile (it's root path, will be created if it does not exist)
+    filepile_root = args[2].split('\\').join('/')
+
+    pipeline = create_pipeline_for_store_update(scan_root, filepile_root)
     pipeline.add_options(debug_level: :all)
     pipeline.run(Job) # Use the 'Job' class to make it run even if the output folder exist
 

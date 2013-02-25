@@ -26,7 +26,9 @@ require 'pathname'
 #   dir-b (final)
 #   dir-a (final)
 #
-def scan_recursive(index_file, scan_info, path, &block)
+def scan_recursive(index_file, scan_info, path, db = nil, &block)
+  puts "#{path}"
+
   base_path = Pathname.new(path)
 
   pathinfo = PathInfo.new(path)
@@ -52,6 +54,9 @@ def scan_recursive(index_file, scan_info, path, &block)
   content_size = 0
   content_hashes = []
   meta_hashes = []
+
+  # ignore the :sha256 column, because we want to GET that value from the db, if all the other attributes match
+  reject_columns_in_db_search = {sha256: true}  
 
   #
   # process each entry in the current directory, capturing relevant metadata for each entry
@@ -95,9 +100,11 @@ def scan_recursive(index_file, scan_info, path, &block)
 
         yield(path, symlink_info) if block_given?
         index_file.write_object(symlink_info)
+     
       elsif Dir.exist?(full_path)
         # recurse into sub dirs after completing this dir scan, tally things up at the end...
         dirs << name
+      
       elsif File.exist?(full_path)
         files << name
 
@@ -113,10 +120,28 @@ def scan_recursive(index_file, scan_info, path, &block)
           :mtime => pathinfo.modify_time,
           :owner => pathinfo.owner,
           :group => pathinfo.group,
+
+          :path => path,  # this is only here so that we can use it to query the FilePile DB to see if an iedntical metadata record exist
         }
+
         unless scan_info[:quick]
-          # file_info[:md5] = FileHash.md5(full_path)
-          file_info[:sha256] = FileHash.sha256(full_path)
+          # if we have a db, then check if it has metadata for this file
+          if db && (db_rows = db.where_attributes(:files, file_info, reject_columns_in_db_search)).size > 0
+            # get the sha256 from database instead of calculating it
+
+            # there should be exactly 1
+            if db_rows.size != 1
+              raise "Found #{db_rows.size} rows where there should be exactly 1"
+            end
+            first = db_rows.first
+            # check if the FilePile db already has this file
+            file_info[:sha256] = first['sha256'] # db rows use string keys (not symbol keys)
+            # file_info[:exists_in_filepile] = true
+          else
+            # no luck, we have to calculate it ourselves
+            file_info[:sha256] = FileHash.sha256(full_path)
+            # file_info[:exists_in_filepile] = false
+          end
 
           hasher = Hasher.new(scan_info[:file_hash_template], file_info)
           file_info[:hash_src] = hasher.source
@@ -128,6 +153,7 @@ def scan_recursive(index_file, scan_info, path, &block)
 
         yield(path, file_info) if block_given?
         index_file.write_object(file_info)
+      
       else
         unknown_info = {
           :type => :unknown,
@@ -135,6 +161,7 @@ def scan_recursive(index_file, scan_info, path, &block)
         }
         yield(path, unknown_info) if block_given?
         index_file.write_object(unknown_info)
+      
       end
     end
   end
@@ -160,7 +187,7 @@ def scan_recursive(index_file, scan_info, path, &block)
   if dirs.count > 0
     dirs.each do |dir|
       puts "Scanning subdir #{dir} of #{path}" if scan_info[:verbose]
-      sub_dir_info = scan_recursive(index_file, scan_info, File.join(path, dir), &block)
+      sub_dir_info = scan_recursive(index_file, scan_info, File.join(path, dir), db, &block)
 
       #
       # accumulation (for current level onlY)

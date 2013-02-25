@@ -53,4 +53,8 @@ class FilePileDir
     File.join @root, 'temp'
   end
 
+  def db_path
+    File.join metadata, "db.sqlite3"
+  end
+
 end

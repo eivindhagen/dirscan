@@ -20,6 +20,7 @@ class DbSqlite3
 
   public
   def execute(sql)
+    # puts "executing sql: #{sql}"
     @db.execute(sql) if @db
   end
 
@@ -43,7 +44,7 @@ class DbSqlite3
       # attr_name is the key used when fetching values from an index file (.store)
       columns_info: {
         'id'     => {attr_name: :id, type: :integer, primary_key: true}, # 'id' will be handled in special ways (omitted in SELECT, rewritten in INSERT)
-        'type'   => {attr_name: :type, type: :integer, mapping: {'file' => 1, 'dir' => 2}}, # mapping to convert from string to integer (integer in db)
+        'type'   => {attr_name: :type, type: :integer, mapping: {:file => 1, :dir => 2}}, # mapping to convert from symbol to integer (integer in db)
         'name'   => {attr_name: :name, type: :text},
         'size'   => {attr_name: :size, type: :integer},
         'mode'   => {attr_name: :mode, type: :text},
@@ -113,7 +114,7 @@ class DbSqlite3
       db_sqlite3.create_table(:files)
 
       # call user's block, if given
-      block.call(db_sqlite3) if block_given?
+      yield(db_sqlite3) if block_given?
 
       db_sqlite3.close
 
@@ -152,7 +153,7 @@ class DbSqlite3
       end
 
       # call user's block, if given
-      block.call(db_sqlite3) if block_given?
+      yield(db_sqlite3) if block_given?
 
       db_sqlite3.close
 
@@ -171,10 +172,14 @@ class DbSqlite3
   def self.open_or_create_database(path, &block)
     if File.exist? path
       # open existing database file
-      open_database(path, block)
+      open_database(path) do |db|
+        yield(db) if block_given?
+      end
     else
       # create new database file
-      create_database(path, block)
+      create_database(path) do |db|
+        yield(db) if block_given?
+      end
     end
   end
 
@@ -210,7 +215,7 @@ class DbSqlite3
     end
   end
 
-  # Find an existing row in a table, where all the unique columns match the value of the given row_hash.
+  # Check for existing rows in a table, where all the unique columns match the value of the given row_hash.
   public
   def count_where_row(table, row_hash)
     table_info = table_info_for(table)
@@ -225,8 +230,68 @@ class DbSqlite3
     end.join(" AND ")
 
     sql = "SELECT COUNT(*) FROM #{table_name} WHERE #{where_string}"
-    # puts "sql: #{sql}"
     exist_count = execute(sql).first[0].to_i
+  end
+
+
+  # Check for existing rows in a table, where all the unique columns match the values from the given attribute_hash. 
+  #
+  # The table_info knows which attribute map to which table column.
+  # The table_info may also contain mappings, so that values from the 
+  # attribute hash are mapped to different values in the table column
+  public
+  def count_where_attributes(table, attributes_hash)
+    table_info = table_info_for(table)
+    table_name = table_info[:table_name]
+
+    where_string = table_info[:columns_unique].map do |column|
+      column_info = table_info[:columns_info][column]
+      attr_name = column_info[:attr_name]
+      
+      value = attributes_hash[attr_name]
+
+      if mapping = column_info[:mapping]
+        value = mapping[value]
+      end
+
+      DbSqlite3.sql_where_value_string(column, value, column_info[:type])
+    end.join(" AND ")
+
+    sql = "SELECT COUNT(*) FROM #{table_name} WHERE #{where_string}"
+    execute sql
+  end
+
+  # Find existing rows in a table, where all the unique columns match the values from the given attribute_hash. 
+  #
+  # The table_info knows which attribute map to which table column.
+  # The table_info may also contain mappings, so that values from the 
+  # attribute hash are mapped to different values in the table column
+  public
+  def where_attributes(table, attributes_hash, ignore_attributes = {})
+    table_info = table_info_for(table)
+    table_name = table_info[:table_name]
+
+    where_string = table_info[:columns_unique].map do |column|
+      column_info = table_info[:columns_info][column]
+      attr_name = column_info[:attr_name]
+
+      # caller may want to ignore certain attributes (e.g. columns that it doesn't have data for)
+      if ignore_attributes[attr_name]
+        # ignore this by emitting 'nil' here, and removing it in reject{} before the join{} (see below)
+      else
+        value = attributes_hash[attr_name]
+
+        if mapping = column_info[:mapping]
+          value = mapping[value]
+        end
+
+        DbSqlite3.sql_where_value_string(column, value, column_info[:type])
+      end
+      
+    end.reject{ |ws| ws.nil? }.join(" AND ")
+
+    sql = "SELECT * FROM #{table_name} WHERE #{where_string}"
+    execute sql
   end
 
 
@@ -260,7 +325,7 @@ class DbSqlite3
 
     sql = "INSERT INTO files VALUES(#{values_string})"
     # puts "sql: #{sql}"
-    execute(sql)
+    execute sql
   end
 
   # Insert a new row into a table, fetching the values from an attribute hash. 
@@ -271,6 +336,8 @@ class DbSqlite3
   public
   def insert_attributes(table, attributes_hash)
     table_info = table_info_for(table)
+    table_name = table_info[:table_name]
+
     values_string = table_info[:columns].map do |column|
       column_info = table_info[:columns_info][column]
       attr_name = column_info[:attr_name]
@@ -278,15 +345,15 @@ class DbSqlite3
       value = attributes_hash[attr_name]
 
       if mapping = column_info[:mapping]
-        value = mapping[value]
+        value = mapping[value.to_sym]
       end
 
       sql_insert_value_string(value, column_info[:type])
     end.join(",")
 
-    sql = "INSERT INTO files VALUES(#{values_string})"
+    sql = "INSERT INTO #{table_name} VALUES(#{values_string})"
     # puts "sql: #{sql}"
-    execute(sql)
+    execute sql
   end
 
   # create a key string from the attributes of a row in the 'files' table
@@ -311,7 +378,7 @@ class DbSqlite3
     table_info = table_info_for(table)
     # get all the records from db
     sql = "SELECT * FROM files" 
-    rows = execute(sql)
+    rows = execute sql
     puts "file records: #{rows.size}"
 
     num_added = 0
