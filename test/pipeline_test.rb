@@ -10,15 +10,15 @@ require File.expand_path('../lib/pipeline.rb', File.dirname(__FILE__))
 PHASE_1_MSG = "This is phase 1 of the test."
 PHASE_1_PATH = "tmp/pipeline_test_phase1.txt"
 
-class MyWorker < Worker
-  def generate
+class MyJob < Job
+  def generate(options = {})
     required_input_files
     required_output_files :file_path
 
     File.open(output_file(:file_path), 'w'){|f| f.write PHASE_1_MSG}
   end
 
-  def upcase
+  def upcase(options = {})
     required_input_files :file_path
     required_output_files :file_path
 
@@ -29,7 +29,7 @@ class MyWorker < Worker
     return new_text
   end
 
-  def print
+  def print(options = {})
     required_input_files :file_path
     required_output_files
 
@@ -39,11 +39,11 @@ class MyWorker < Worker
   end
 end
 
-class TestJob < Test::Unit::TestCase
+class TestWorker < Test::Unit::TestCase
   INPUT_PATH = 'tmp/input.txt'
   OUTPUT_PATH = 'tmp/output.txt'
 
-  def job_config_basic
+  def worker_config_basic
     {
       inputs: {
         files: {
@@ -55,44 +55,44 @@ class TestJob < Test::Unit::TestCase
           file_path: OUTPUT_PATH,
         },
       },
-      worker: {
-        ruby_class: MyWorker,
+      job: {
+        ruby_class: MyJob,
         ruby_method: :upcase,
       },
     }
   end
 
-  def test_job_create
-    job = Job.new(job_config_basic)
-    assert_equal({files: {file_path: "tmp/input.txt"}}, job.inputs)
-    assert_equal({files: {file_path: "tmp/output.txt"}}, job.outputs)
-    assert_equal(MyWorker, job.ruby_class)
-    assert_equal(:upcase, job.ruby_method)
+  def test_worker_create
+    worker = Worker.new(worker_config_basic)
+    assert_equal({files: {file_path: "tmp/input.txt"}}, worker.inputs)
+    assert_equal({files: {file_path: "tmp/output.txt"}}, worker.outputs)
+    assert_equal(MyJob, worker.ruby_class)
+    assert_equal(:upcase, worker.ruby_method)
   end
 
-  def test_job_lazy
-    job = LazyJob.new(job_config_basic)
+  def test_worker_lazy
+    worker = LazyWorker.new(worker_config_basic)
     File.delete(OUTPUT_PATH) if File.exist?(OUTPUT_PATH)
-    sim = job.simulate
+    sim = worker.simulate
     assert_equal(
-      "MyWorker.new({:files=>{:file_path=>\"tmp/input.txt\"}}, {:files=>{:file_path=>\"tmp/output.txt\"}}).upcase",
+      "MyJob.new({:files=>{:file_path=>\"tmp/input.txt\"}}, {:files=>{:file_path=>\"tmp/output.txt\"}}).upcase({})",
       sim,
       "When output files is missing, sim should generate it"
     )
 
     File.open(OUTPUT_PATH, 'w'){|f| f.write('test')}
-    sim = job.simulate
-    assert_nil(sim, "When outout file exist, LazyJob.sim should do nothing")
+    sim = worker.simulate
+    assert_nil(sim, "When outout file exist, LazyWorker.sim should do nothing")
   end
 
-  def test_job_dependency
-    job = DependencyJob.new(job_config_basic)
+  def test_worker_dependency
+    worker = DependencyWorker.new(worker_config_basic)
     File.open(INPUT_PATH, 'w'){|f| f.write('sample input file text')}
 
     File.delete(OUTPUT_PATH) if File.exist?(OUTPUT_PATH)
-    sim = job.simulate
+    sim = worker.simulate
     assert_equal(
-      "MyWorker.new({:files=>{:file_path=>\"tmp/input.txt\"}}, {:files=>{:file_path=>\"tmp/output.txt\"}}).upcase",
+      "MyJob.new({:files=>{:file_path=>\"tmp/input.txt\"}}, {:files=>{:file_path=>\"tmp/output.txt\"}}).upcase({})",
       sim,
       "When output files is missing, sim should generate it"
     )
@@ -100,18 +100,18 @@ class TestJob < Test::Unit::TestCase
     File.open(OUTPUT_PATH, 'w'){|f| f.write('sample output file text')}
     # set output file modify time to 10 seconds ago, so it's older than the input file
     PathInfo.new(OUTPUT_PATH).set_modify_time(Time.now.to_i - 10)
-    sim = job.simulate
+    sim = worker.simulate
     assert_equal(
-      "MyWorker.new({:files=>{:file_path=>\"tmp/input.txt\"}}, {:files=>{:file_path=>\"tmp/output.txt\"}}).upcase",
+      "MyJob.new({:files=>{:file_path=>\"tmp/input.txt\"}}, {:files=>{:file_path=>\"tmp/output.txt\"}}).upcase({})",
       sim,
-      "When output file exist and is newer then input file, DependencyJob.sim should do nothing"
+      "When output file exist and is newer then input file, DependencyWorker.sim should do nothing"
     )
 
     File.open(OUTPUT_PATH, 'w'){|f| f.write('sample output file text')}
     # set input file modify time to 10 seconds ago, so it's older than the output file
     PathInfo.new(INPUT_PATH).set_modify_time(Time.now.to_i - 10)
-    sim = job.simulate
-    assert_nil(sim, "When output file exist and is newer then input file, DependencyJob.sim should do nothing")
+    sim = worker.simulate
+    assert_nil(sim, "When output file exist and is newer then input file, DependencyWorker.sim should do nothing")
   end
 end
 
@@ -125,8 +125,8 @@ class TestPipeline < Test::Unit::TestCase
           file_path: PHASE_1_PATH,
         },
       },
-      worker: {
-        ruby_class: MyWorker,
+      job: {
+        ruby_class: MyJob,
         ruby_method: :generate,
       },
     }
@@ -141,8 +141,8 @@ class TestPipeline < Test::Unit::TestCase
       },
       outputs: {
       },
-      worker: {
-        ruby_class: MyWorker,
+      job: {
+        ruby_class: MyJob,
         ruby_method: :print,
       },
     }
@@ -150,24 +150,24 @@ class TestPipeline < Test::Unit::TestCase
 
 
   def pipeline_config_missing_job
-    { # a print job that relies on an input file, will raise exception when input file does not exist
+    { # a print worker that relies on an input file, will raise exception when input file does not exist
       jobs: {
         generate: generate_job_config,
       },
-      job_order: [:generate, :print], # :print job is not defined above, so should cause an error
+      job_order: [:generate, :print], # The ':print' job is not defined in 'jobs:', so should cause an error
     }
   end
 
-  def test_missing_job
+  def test_missing_worker
     pipeline = Pipeline.new(pipeline_config_missing_job)
 
-    assert_raise ArgumentError, "Should raise ArgumentError because the :print job is not defined in :jobs[]" do
+    assert_raise ArgumentError, "Should raise ArgumentError because the :print worker is not defined in :workers[]" do
       result = pipeline.run
     end
   end
      
   def pipeline_config_missing_input_file
-    { # a print job that relies on an input file, will raise exception when input file does not exist
+    { # a print worker that relies on an input file, will raise exception when input file does not exist
       jobs: {
         print: print_job_config,
       },
@@ -215,8 +215,8 @@ class TestPipeline < Test::Unit::TestCase
     pipeline = Pipeline.new(pipeline_config_basic)
     result = pipeline.simulate
     expected_sim = [ # NOTE: adding escaped new-line chars to match the output from simulate()
-      "MyWorker.new({}, {:files=>{:file_path=>\"tmp/pipeline_test_phase1.txt\"}}).generate",
-      "MyWorker.new({:files=>{:file_path=>\"tmp/pipeline_test_phase1.txt\"}}, {}).print",
+      "MyJob.new({}, {:files=>{:file_path=>\"tmp/pipeline_test_phase1.txt\"}}).generate({})",
+      "MyJob.new({:files=>{:file_path=>\"tmp/pipeline_test_phase1.txt\"}}, {}).print({})",
     ]
     assert_equal(expected_sim, result)
   end

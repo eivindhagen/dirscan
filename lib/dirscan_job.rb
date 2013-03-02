@@ -9,7 +9,7 @@ require 'json'
 require 'bindata'
 require 'socket'
 
-class DirScanWorker < Worker
+class DirScanJob < Job
   attr_accessor :inputs, :outputs
 
   # perform a directory scan, by inspecting all files, symlinks and folders (recursively)
@@ -153,7 +153,6 @@ class DirScanWorker < Worker
             size = File.size(full_path)
             identical = true
             identical = false if size != file[:size]
-            identical = false if FileHash.md5(full_path) != file[:md5]
             identical = false if FileHash.sha256(full_path) != file[:sha256]
             issues_count += 1 unless identical
           else

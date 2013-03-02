@@ -1,13 +1,13 @@
 # Pipeline system
 #
-# A Pipeline is made up of Jobs, where each job's work is performed by a method defined in a Worker class
+# A Pipeline is made up of Workers, where each worker's work is performed by a method defined in a Job class
 #
-# Worker   : Implements the actual code for doing a specific type of work, i.e. process input files into output files
+# Job   : Implements the actual code for doing a specific type of work, i.e. process input files into output files
 #
-# Job      : Determines if the work needs to be done, and will skip the work if it thinks it has been done already.
-#            This is an optimization layer. Different types of Job classes will skip work using different criteria.
+# Worker      : Determines if the work needs to be done, and will skip the work if it thinks it has been done already.
+#            This is an optimization layer. Different types of Worker classes will skip work using different criteria.
 #
-# Pipeline : Executes a chain of jobs, in a predetermined order. Uses Jobs to decide if the work needs to be done, or can be skipped.
+# Pipeline : Executes a chain of workers, in a predetermined order. Uses Workers to decide if the work needs to be done, or can be skipped.
 
 require 'debugger'
 require 'yaml'
@@ -21,12 +21,12 @@ class Object
   end
 end
 
-# Worker is a base class for implementing more specialized worker classes.
-# A Worker class is executed by a Job, see the Job class for more info.
+# Job is a base class for implementing more specialized job classes.
+# A Job class is executed by a Worker, see the Worker class for more info.
 #
-# By inheriting from the Worker class, your worker class have easy access to
+# By inheriting from the Job class, your job class have easy access to
 # the input and output arguments, which are broken down into files & values
-class Worker
+class Job
   def initialize(inputs, outputs)
     @inputs = inputs || {}
     @outputs = outputs || {}
@@ -151,22 +151,22 @@ class Worker
 end
 
 
-# Job is a base class, more specific job classes inherit from this one.
+# Worker is a base class, more specific worker classes inherit from this one.
 #
-# A Job holds the configuration needed to create a Worker that can run (or simulate)
-# This plain Job class will perform the job even if all teh work turns out to be redundant,
+# A Worker holds the configuration needed to Job instances that can run (or simulate)
+# This plain Worker class will perform the worker even if all the work turns out to be redundant,
 # i.e. it's not very smart about skipping work that has already been done
-class Job
-  def initialize(job_config)
-    @config = job_config
+class Worker
+  def initialize(worker_config)
+    @config = worker_config
   end
 
   def config
     @config
   end
   
-  def worker
-    config[:worker]
+  def job
+    config[:job]
   end
 
   def inputs
@@ -190,34 +190,34 @@ class Job
   end
 
   def to_s
-    "#{worker[:ruby_class].to_s}::#{worker[:ruby_method]}"
+    "#{job[:ruby_class].to_s}::#{job[:ruby_method]}"
   end
 
   def ruby_class
-    Kernel.const_get(worker[:ruby_class].to_s)  # if this was Rails we could have done .to_s.constantize
+    Kernel.const_get(job[:ruby_class].to_s)  # if this was Rails we could have done .to_s.constantize
   end
 
   def ruby_method
-    worker[:ruby_method]
+    job[:ruby_method]
   end
 
   def run(options = {})
-    puts "running job: #{self}" if options[:debug_level] == :all
-    # create instance of the worker class, with the given inputs & outputs
+    puts "running worker: #{self}" if options[:debug_level] == :all
+    # create instance of the job class, with the given inputs & outputs
     obj = ruby_class.new(inputs, outputs)
-    # call the worker method
+    # call the job method
     obj.send ruby_method, options
   end
 
   def simulate(options = {})
-    puts "simulating job: #{self}" if options[:debug_level] == :all
+    puts "simulating worker: #{self}" if options[:debug_level] == :all
     "#{ruby_class}.new(#{inputs}, #{outputs}).#{ruby_method}(#{options})"
   end
 end
 
-# LazyJob will skip the work if the output file(s) already exist
+# LazyWorker will skip the work if the output file(s) already exist
 # This will refuse to do work if the input files are fresh and the output files are stale, so beware!
-class LazyJob < Job
+class LazyWorker < Worker
   def output_files_exist?
     outputs[:files].each do |file_key, file_path|
       unless file_path && File.exist?(file_path)
@@ -231,30 +231,30 @@ class LazyJob < Job
     return true unless output_files_exist?
   end
 
-  def run(options)
+  def run(options = {})
     if output_stale?
-      puts "performing job #{self} because output is stale" if options[:debug_level] == :all
+      puts "performing worker #{self} because output is stale" if options[:debug_level] == :all
       super(options)
     else
-      puts "skipping job #{self} because output is fresh" if options[:debug_level] == :all
+      puts "skipping worker #{self} because output is fresh" if options[:debug_level] == :all
       nil
     end
   end
 
-  def simulate(options)
+  def simulate(options = {})
     if output_stale?
-      puts "performing job #{self} because output is stale" if options[:debug_level] == :all
+      puts "performing worker #{self} because output is stale" if options[:debug_level] == :all
       super(options)
     else
-      puts "skipping job #{self} because output is fresh" if options[:debug_level] == :all
+      puts "skipping worker #{self} because output is fresh" if options[:debug_level] == :all
       nil
     end
   end
 end
 
-# DependencyJob will skip the work if the output file(s) are newer than the input file(s).
-# It's bit smarter than the LazyJob class, since it WILL do the work if the output is stale.
-class DependencyJob < LazyJob 
+# DependencyWorker will skip the work if the output file(s) are newer than the input file(s).
+# It's bit smarter than the LazyWorker class, since it WILL do the work if the output is stale.
+class DependencyWorker < LazyWorker 
   def modify_times_for_files(files) # files = hash{name: path, ...}
     modify_times = {} # create a hash that mirrors the files hash (method argument)
     files.each do |file_key, file_path|
@@ -278,9 +278,9 @@ class DependencyJob < LazyJob
 end
 
 
-# Pipeline can execute an entire job sequenze, where output from one job is used as input for other jobs
+# Pipeline can execute an entire worker sequenze, where output from one worker is used as input for other workers
 #
-# The run() and simulate() methods create Job objects, which in turn execute Worker methods to do the work.
+# The run() and simulate() methods create Worker objects, which in turn execute Job methods to do the work.
 class Pipeline
   def initialize(pipeline_config, options = {})
     @config = pipeline_config
@@ -297,25 +297,25 @@ class Pipeline
 
   def config_for_job(job)
     unless @config[:jobs] && @config[:jobs][job]
-      raise ArgumentError, "The job :#{job} was not found in @config[:jobs]"
+      raise ArgumentError, "The job :#{job} was not found in @config[:job]"
     end
     @config[:jobs][job]
   end
 
-  def run(job_class = Job)
+  def run(worker_class = Worker)
     result = nil
-    @config[:job_order].each do |job|
-      job = job_class.new(config_for_job(job))
-      result = job.run(options)
+    @config[:job_order].each do |worker|
+      worker = worker_class.new(config_for_job(worker))
+      result = worker.run(options)
     end
     return result
   end
 
-  def simulate(job_class = Job)
+  def simulate(worker_class = Worker)
     result = []
-    @config[:job_order].each do |job|
-      job = job_class.new(config_for_job(job))
-      result << job.simulate(options)
+    @config[:job_order].each do |worker|
+      worker = worker_class.new(config_for_job(worker))
+      result << worker.simulate(options)
     end
     return result
   end

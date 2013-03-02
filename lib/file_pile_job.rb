@@ -11,7 +11,7 @@ require 'json'
 require 'bindata'
 require 'fileutils'
 
-class FilePileWorker < Worker
+class FilePileJob < Job
   attr_accessor :inputs, :outputs
 
   # store all files located in the input folder (recursive) to the FilePile
@@ -158,4 +158,4 @@ class FilePileWorker < Worker
     end # db
   end
 
-end # class FilePileWorker
+end # class FilePileJob

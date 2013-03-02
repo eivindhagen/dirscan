@@ -1,10 +1,10 @@
 # filepile.rb
 
 require File.join(File.dirname(__FILE__), 'lib', 'hostinfo')
-require File.join(File.dirname(__FILE__), 'lib', 'file_worker')
-require File.join(File.dirname(__FILE__), 'lib', 'indexfile_worker')
-require File.join(File.dirname(__FILE__), 'lib', 'dirscan_worker')
-require File.join(File.dirname(__FILE__), 'lib', 'file_pile_worker')
+require File.join(File.dirname(__FILE__), 'lib', 'file_job')
+require File.join(File.dirname(__FILE__), 'lib', 'indexfile_job')
+require File.join(File.dirname(__FILE__), 'lib', 'dirscan_job')
+require File.join(File.dirname(__FILE__), 'lib', 'file_pile_job')
 require File.join(File.dirname(__FILE__), 'lib', 'pipeline')
 require File.join(File.dirname(__FILE__), 'lib', 'file_pile_dir')
 
@@ -22,8 +22,8 @@ def create_pipeline_for_sha256(path)
             sha256: nil,
           },
         },
-        worker: {
-          ruby_class: :FileWorker,
+        job: {
+          ruby_class: :FileJob,
           ruby_method: :sha256,
         }
       }
@@ -50,8 +50,8 @@ def create_pipeline_for_copy_file(src_path, dst_path)
             dst_path: dst_path,
           },
         },
-        worker: {
-          ruby_class: :FileWorker,
+        job: {
+          ruby_class: :FileJob,
           ruby_method: :copy,
         }
       }
@@ -78,8 +78,8 @@ def create_pipeline_for_move_file(src_path, dst_path)
             dst_path: dst_path,
           },
         },
-        worker: {
-          ruby_class: :FileWorker,
+        job: {
+          ruby_class: :FileJob,
           ruby_method: :move,
         }
       }
@@ -101,8 +101,8 @@ def create_pipeline_for_delete_file(dst_path)
             dst_path: dst_path,
           },
         },
-        worker: {
-          ruby_class: :FileWorker,
+        job: {
+          ruby_class: :FileJob,
           ruby_method: :delete,
         }
       }
@@ -137,8 +137,8 @@ def create_pipeline_for_store(scan_root, filepile_root)
             scan_index: scan_index,
           },
         },
-        worker: {
-          ruby_class: :FilePileWorker,
+        job: {
+          ruby_class: :FilePileJob,
           ruby_method: :store,
         }
       },
@@ -153,8 +153,8 @@ def create_pipeline_for_store(scan_root, filepile_root)
             scan_unpack: scan_unpack,
           },
         },
-        worker: {
-          ruby_class: :IndexFileWorker,
+        job: {
+          ruby_class: :IndexFileJob,
           ruby_method: :unpack,
         }
       }
@@ -189,8 +189,8 @@ def create_pipeline_for_store_update(scan_root, filepile_root)
             scan_index: scan_index,
           },
         },
-        worker: {
-          ruby_class: :FilePileWorker,
+        job: {
+          ruby_class: :FilePileJob,
           ruby_method: :store_update,
         }
       },
@@ -205,8 +205,8 @@ def create_pipeline_for_store_update(scan_root, filepile_root)
             scan_unpack: scan_unpack,
           },
         },
-        worker: {
-          ruby_class: :IndexFileWorker,
+        job: {
+          ruby_class: :IndexFileJob,
           ruby_method: :unpack,
         }
       }
@@ -233,8 +233,8 @@ def create_pipeline_for_unpack(scan_index, scan_unpack)
             scan_unpack: scan_unpack,
           },
         },
-        worker: {
-          ruby_class: :IndexFileWorker,
+        job: {
+          ruby_class: :IndexFileJob,
           ruby_method: :unpack,
         }
       }
@@ -274,8 +274,8 @@ def create_pipeline_for_scan(scan_root, dst_files_dir)
             scan_index: scan_index,
           },
         },
-        worker: {
-          ruby_class: :DirScanWorker,
+        job: {
+          ruby_class: :DirScanJob,
           ruby_method: :scan,
         }
       },
@@ -291,8 +291,8 @@ def create_pipeline_for_scan(scan_root, dst_files_dir)
             scan_unpack: scan_unpack,
           },
         },
-        worker: {
-          ruby_class: :IndexFileWorker,
+        job: {
+          ruby_class: :IndexFileJob,
           ruby_method: :unpack,
         }
       },
@@ -308,8 +308,8 @@ def create_pipeline_for_scan(scan_root, dst_files_dir)
             analysis: analysis,
           },
         },
-        worker: {
-          ruby_class: :DirScanWorker,
+        job: {
+          ruby_class: :DirScanJob,
           ruby_method: :analyze,
         }
       },
@@ -325,8 +325,8 @@ def create_pipeline_for_scan(scan_root, dst_files_dir)
             analysis_report: analysis_report,
           },
         },
-        worker: {
-          ruby_class: :DirScanWorker,
+        job: {
+          ruby_class: :DirScanJob,
           ruby_method: :analysis_report,
         }
       },
@@ -344,8 +344,8 @@ def create_pipeline_for_scan(scan_root, dst_files_dir)
             sha256_cache: sha256_cache,
           },
         },
-        worker: {
-          ruby_class: :DirScanWorker,
+        job: {
+          ruby_class: :DirScanJob,
           ruby_method: :iddupe_files,
         }
       },
@@ -362,8 +362,8 @@ def create_pipeline_for_scan(scan_root, dst_files_dir)
             iddupe_files_report: iddupe_files_report,
           },
         },
-        worker: {
-          ruby_class: :DirScanWorker,
+        job: {
+          ruby_class: :DirScanJob,
           ruby_method: :iddupe_files_report,
         }
       },
@@ -389,8 +389,8 @@ def create_pipeline_for_export_csv(index_path, csv_path)
             csv_path: csv_path,
           },
         },
-        worker: {
-          ruby_class: :IndexFileWorker,
+        job: {
+          ruby_class: :IndexFileJob,
           ruby_method: :export_csv,
         }
       }
@@ -418,8 +418,8 @@ def create_pipeline_for_export_sqlite3(index_path, db_path)
             db_path: db_path,
           },
         },
-        worker: {
-          ruby_class: :IndexFileWorker,
+        job: {
+          ruby_class: :IndexFileJob,
           ruby_method: :export_sqlite3,
         }
       }
@@ -442,8 +442,8 @@ def create_pipeline_for_create_sqlite3(db_path)
             db_path: db_path,
           },
         },
-        worker: {
-          ruby_class: :IndexFileWorker,
+        job: {
+          ruby_class: :IndexFileJob,
           ruby_method: :create_sqlite3,
         }
       }
@@ -475,8 +475,8 @@ def create_pipeline_for_diff_sqlite3(diff_operation, input1_path, input2_path, o
             db_out_path: output_path,
           },
         },
-        worker: {
-          ruby_class: :IndexFileWorker,
+        job: {
+          ruby_class: :IndexFileJob,
           ruby_method: :diff_sqlite3,
         },
       }
@@ -505,8 +505,8 @@ def create_pipeline_for_merge_sqlite3(input1_path, input2_path, output_path)
             db_out_path: output_path,
           },
         },
-        worker: {
-          ruby_class: :IndexFileWorker,
+        job: {
+          ruby_class: :IndexFileJob,
           ruby_method: :merge_sqlite3,
         }
       }
@@ -534,8 +534,8 @@ def create_pipeline_for_inspect_sqlite3(db_path)
             files_count: nil,
           },
         },
-        worker: {
-          ruby_class: :IndexFileWorker,
+        job: {
+          ruby_class: :IndexFileJob,
           ruby_method: :inspect_sqlite3,
         }
       }
@@ -558,7 +558,7 @@ def process_cmdline(args)
     # calculate sha256 for a file
     path = args[1].split('\\').join('/')
     pipeline = create_pipeline_for_sha256(path)
-    pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+    pipeline.run(Worker) # Use the 'Worker' class to redo the work no matter what
     puts pipeline.config_for_job(:sha256).to_yaml
 
   when 'store'
@@ -571,7 +571,7 @@ def process_cmdline(args)
 
     pipeline = create_pipeline_for_store(scan_root, filepile_root)
     pipeline.add_options(debug_level: :all)
-    pipeline.run(Job) # Use the 'Job' class to make it run even if the output folder exist
+    pipeline.run(Worker) # Use the 'Worker' class to make it run even if the output folder exist
 
   when 'store_update'
     # store new & modified files in a filepile, by recursive scan of input folder
@@ -584,7 +584,7 @@ def process_cmdline(args)
 
     pipeline = create_pipeline_for_store_update(scan_root, filepile_root)
     pipeline.add_options(debug_level: :all)
-    pipeline.run(Job) # Use the 'Job' class to make it run even if the output folder exist
+    pipeline.run(Worker) # Use the 'Worker' class to make it run even if the output folder exist
 
   when 'unpack'
     # export CSV file from an index file
@@ -592,7 +592,7 @@ def process_cmdline(args)
     scan_unpack = args[2].split('\\').join('/')
 
     pipeline = create_pipeline_for_unpack(scan_index, scan_unpack)
-    pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+    pipeline.run(Worker) # Use the 'Worker' class to redo the work no matter what
 
   when 'unpack_all'
     # unoack all .store files in the filepile's log directory
@@ -606,7 +606,7 @@ def process_cmdline(args)
         unpack_path = full_path + '.json'
         puts "Unpacking '#{full_path}' to '#{unpack_path}'"
         pipeline = create_pipeline_for_unpack(full_path, unpack_path)
-        pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
+        pipeline.run(DependencyWorker) # Use the 'DependencyWorker' class to skip re-creating output if input is older
       rescue Exception => e
         puts "Exception while unpacking '#{full_path}' to '#{unpack_path}'"
         puts e.message
@@ -620,8 +620,8 @@ def process_cmdline(args)
     output_files_dir = args[2].split('\\').join('/')
 
     pipeline = create_pipeline_for_scan(scan_root, output_files_dir)
-    # pipeline.simulate(LazyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
-    pipeline.run(DependencyJob) # Use the 'LazyJob' class to make it run only if the output does not already exist
+    # pipeline.simulate(LazyWorker) # Use the 'LazyWorker' class to make it run only if the output does not already exist
+    pipeline.run(DependencyWorker) # Use the 'LazyWorker' class to make it run only if the output does not already exist
 
   when 'export_csv'
     # export CSV file from an index file
@@ -629,8 +629,8 @@ def process_cmdline(args)
     csv_path = args[2].split('\\').join('/')
 
     pipeline = create_pipeline_for_export_csv(index_path, csv_path)
-    # pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
-    pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+    # pipeline.run(DependencyWorker) # Use the 'DependencyWorker' class to skip re-creating output if input is older
+    pipeline.run(Worker) # Use the 'Worker' class to redo the work no matter what
 
   when 'export_csv_all'
     # export csv file for all index files in the filepile's log directory
@@ -644,7 +644,7 @@ def process_cmdline(args)
         csv_path = full_path + '.csv'
         puts "Exporting '#{full_path}' to '#{csv_path}'"
         pipeline = create_pipeline_for_export_csv(full_path, csv_path)
-        pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
+        pipeline.run(DependencyWorker) # Use the 'DependencyWorker' class to skip re-creating output if input is older
       rescue Exception => e
         puts "Exception while exporting '#{full_path}' to '#{csv_path}'"
         puts e.message
@@ -658,8 +658,8 @@ def process_cmdline(args)
     db_path = args[2].split('\\').join('/')
 
     pipeline = create_pipeline_for_export_sqlite3(index_path, db_path)
-    # pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
-    pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+    # pipeline.run(DependencyWorker) # Use the 'DependencyWorker' class to skip re-creating output if input is older
+    pipeline.run(Worker) # Use the 'Worker' class to redo the work no matter what
 
   when 'export_sqlite3_all'
     # export sqlite3 database for all index files in the filepile's log directory
@@ -673,7 +673,7 @@ def process_cmdline(args)
         sqlite3_path = full_path + '.sqlite3'
         puts "Exporting '#{full_path}' to '#{sqlite3_path}'"
         pipeline = create_pipeline_for_export_sqlite3(full_path, sqlite3_path)
-        pipeline.run(DependencyJob) # Use the 'DependencyJob' class to skip re-creating output if input is older
+        pipeline.run(DependencyWorker) # Use the 'DependencyWorker' class to skip re-creating output if input is older
       rescue Exception => e
         puts "Exception while exporting '#{full_path}' to '#{sqlite3_path}'"
         puts e.message
@@ -689,7 +689,7 @@ def process_cmdline(args)
     output_path = args[4].split('\\').join('/')
 
     pipeline = create_pipeline_for_diff_sqlite3(diff_operation, input1_path, input2_path, output_path)
-    pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+    pipeline.run(Worker) # Use the 'Worker' class to redo the work no matter what
 
   when 'merge_sqlite3'
     # merge two sqlite3 files, output a third file
@@ -698,7 +698,7 @@ def process_cmdline(args)
     output_path = args[3].split('\\').join('/')
 
     pipeline = create_pipeline_for_merge_sqlite3(input1_path, input2_path, output_path)
-    pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+    pipeline.run(Worker) # Use the 'Worker' class to redo the work no matter what
 
   when 'merge_sqlite3_all'
     # merge all sqlite3 databases (logs/*.sqlite3) into a single database (metadata/db.sqlite3)
@@ -711,7 +711,7 @@ def process_cmdline(args)
     # create empty final db if none exist already
     unless File.exist? final_db_path
       pipeline = create_pipeline_for_create_sqlite3(final_db_path)
-      pipeline.run(Job)
+      pipeline.run(Worker)
     end
 
     # process all *.store files, merge each one into the final db
@@ -719,17 +719,17 @@ def process_cmdline(args)
       # merge into new file (temp)
       puts "\nmerge into new file (temp)"
       pipeline = create_pipeline_for_merge_sqlite3(final_db_path, full_path, merge_db_path)
-      pipeline.run(Job)
+      pipeline.run(Worker)
 
       # delete old version of final
       puts "\ndelete old version of final"
       pipeline = create_pipeline_for_delete_file(final_db_path)
-      pipeline.run(Job)
+      pipeline.run(Worker)
 
       # move merged (temp) to final
       puts "\nmove merged (temp) to final"
       pipeline = create_pipeline_for_move_file(merge_db_path, final_db_path)
-      pipeline.run(Job)
+      pipeline.run(Worker)
     end
 
   when 'inspect_sqlite3'
@@ -737,7 +737,7 @@ def process_cmdline(args)
     db_path = args[1].split('\\').join('/')
 
     pipeline = create_pipeline_for_inspect_sqlite3(db_path)
-    pipeline.run(Job) # Use the 'Job' class to redo the work no matter what
+    pipeline.run(Worker) # Use the 'Worker' class to redo the work no matter what
 
   end
 end

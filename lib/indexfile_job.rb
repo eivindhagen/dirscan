@@ -10,7 +10,7 @@ require 'bindata'
 require 'socket'
 require "benchmark"
 
-class IndexFileWorker < Worker
+class IndexFileJob < Job
   attr_accessor :inputs, :outputs
 
   # unpack a binary index file and write a text version of the file
@@ -73,7 +73,7 @@ class IndexFileWorker < Worker
 
 
   #
-  # sqlite3 worker methods
+  # sqlite3 job methods
   #
 
   # create an empty sqlite3 database
@@ -223,7 +223,7 @@ class IndexFileWorker < Worker
   #
   # Performance profile:
   # - Fast, because SQL SELECT is fast when there is an INDEX on the 'files' table
-  # - Uses very little memory, because records are processed and then forgotten, it's the DB's job to find duplicates for us (and that's why it's slow)
+  # - Uses very little memory, because records are processed and then forgotten, it's the DB's worker to find duplicates for us (and that's why it's slow)
   # - Suitable for all cases, and especially if one in_db is very large and the other in_db is very small
   def merge_sqlite3(options = {})
     required_input_files :db_in1_path, :db_in2_path
@@ -308,4 +308,4 @@ class IndexFileWorker < Worker
   end
 
 
-end # class IndexFileWorker
+end # class IndexFileJob

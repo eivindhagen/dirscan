@@ -5,7 +5,7 @@ require File.join(File.dirname(__FILE__), 'hasher')
 require 'pathname'
 require 'fileutils'
 
-class FileWorker < Worker
+class FileJob < Job
   attr_accessor :inputs, :outputs
 
   # calculate sah256 for a path

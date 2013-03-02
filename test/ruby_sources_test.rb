@@ -2,7 +2,7 @@
 require File.expand_path('test_helper.rb', File.dirname(__FILE__))
 
 #include the classes we are testing
-require File.expand_path('../lib/dirscan_worker.rb', File.dirname(__FILE__))
+require File.expand_path('../lib/dirscan_job.rb', File.dirname(__FILE__))
 
 class TestRubySources < Test::Unit::TestCase
 
