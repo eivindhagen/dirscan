@@ -7,7 +7,7 @@ require File.expand_path('../lib/file_info_db.rb', File.dirname(__FILE__))
 class TestIndexFile < Test::Unit::TestCase
 
   def add_file_record(id)
-    FileInfo.create({
+    FileInfoDb::FileInfo.create({
       type: 1,
       name: "name#{id}",
       size: 100 + id,
@@ -27,18 +27,18 @@ class TestIndexFile < Test::Unit::TestCase
 
     # create database file
     FileInfoDb.new(path)
-    assert_equal(0, FileInfo.count)
+    assert_equal(0, FileInfoDb::FileInfo.count)
 
     # add a record
     add_file_record(1)
-    assert_equal(1, FileInfo.count)
+    assert_equal(1, FileInfoDb::FileInfo.count)
 
     # reopen database
     FileInfoDb.new(path)
-    assert_equal(1, FileInfo.count)
+    assert_equal(1, FileInfoDb::FileInfo.count)
 
     # reopen database
-    rec = FileInfo.get(1)
+    rec = FileInfoDb::FileInfo.get(1)
     rec.destroy
 
     # delete the temp file

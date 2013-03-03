@@ -27,7 +27,7 @@ require 'pathname'
 #   dir-a (final)
 #
 def scan_recursive(index_file, scan_info, path, db = nil, &block)
-  puts "#{path}"
+  # puts "#{path}"
 
   base_path = Pathname.new(path)
 

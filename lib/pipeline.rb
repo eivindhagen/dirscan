@@ -202,7 +202,7 @@ class Worker
   end
 
   def run(options = {})
-    puts "running worker: #{self}" if options[:debug_level] == :all
+    # puts "running worker: #{self}" if options[:debug_level] == :all
     # create instance of the job class, with the given inputs & outputs
     obj = ruby_class.new(inputs, outputs)
     # call the job method
@@ -210,7 +210,7 @@ class Worker
   end
 
   def simulate(options = {})
-    puts "simulating worker: #{self}" if options[:debug_level] == :all
+    # puts "simulating worker: #{self}" if options[:debug_level] == :all
     "#{ruby_class}.new(#{inputs}, #{outputs}).#{ruby_method}(#{options})"
   end
 end
@@ -268,8 +268,8 @@ class DependencyWorker < LazyWorker
 
     input_modify_times = modify_times_for_files(input_files)
     output_modify_times = modify_times_for_files(output_files)
-    puts "input files: #{input_modify_times.to_yaml}"
-    puts "output files: #{output_modify_times.to_yaml}"
+    # puts "input files: #{input_modify_times.to_yaml}"
+    # puts "output files: #{output_modify_times.to_yaml}"
     input_modify_times.values.max >= output_modify_times.values.min # true if newest input file is newer than oldest output file
   end
 
