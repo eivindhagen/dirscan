@@ -1,8 +1,10 @@
+require 'pathname'
+
 require 'rubygems'
 require 'data_mapper' # requires all the gems listed above
 require 'dm-sqlite-adapter' # SQLite3 support with DataMapper
 
-require 'pathname'
+require File.expand_path('logging', File.dirname(__FILE__))
 
 # If you want the logs displayed you have to do this before the call to setup
 DataMapper::Logger.new('log/datamapper.log', :debug)
@@ -15,6 +17,8 @@ DataMapper.finalize
 
 
 class FileInfoDb
+  # Mix in the ability to log stuff ...
+  include Logging
 
   class FileInfo
     include DataMapper::Resource
@@ -38,6 +42,7 @@ class FileInfoDb
   # init new instance
   public
   def initialize(path)
+    logger.debug "initialize(#{path})"
     is_existing_db = File.exist?(path)
 
     # A Sqlite3 connection to a persistent database
@@ -56,3 +61,4 @@ class FileInfoDb
   end
 
 end
+

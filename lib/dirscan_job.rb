@@ -1,8 +1,9 @@
+require File.expand_path('logging', File.dirname(__FILE__))
 require File.join(File.dirname(__FILE__), 'hasher')
 require File.join(File.dirname(__FILE__), 'pathinfo')
 require File.join(File.dirname(__FILE__), 'indexfile')
 require File.join(File.dirname(__FILE__), 'pipeline')
-require File.join(File.dirname(__FILE__), 'scan_recursive')
+require File.join(File.dirname(__FILE__), 'deep_scanner')
 
 require 'pathname'
 require 'json'
@@ -52,7 +53,7 @@ class DirScanJob < Job
       index_file.write_object(scan_info)
 
       # scan recursively
-      @scan_result = scan_recursive(index_file, scan_info, input_file(:scan_root))
+      @scan_result = DeepScanner.scan_recursive(index_file, scan_info, input_file(:scan_root))
     end
 
     return @scan_result
@@ -80,7 +81,7 @@ class DirScanJob < Job
       # read from index file until we reach the end
       while not index_file.eof? do
         object = index_file.read_object
-        # puts "object: #{object.inspect}"
+        # logger.debug "object: #{object.inspect}"
         object_count += 1
         
         case object[:type].to_sym
@@ -312,9 +313,9 @@ class DirScanJob < Job
           size = file[:size]
           collection = collection_by_file_size[size]
           if collection
-            # puts "dirscan[:scan_root] = #{dirscan[:scan_root]}"
-            # puts "dir[:path] = #{dir[:path]}"
-            # puts "file[:name] = #{file[:name]}"
+            # logger.debug "dirscan[:scan_root] = #{dirscan[:scan_root]}"
+            # logger.debug "dir[:path] = #{dir[:path]}"
+            # logger.debug "file[:name] = #{file[:name]}"
             full_path = File.join(dir[:path], file[:name])
             sha256 = FileHash.sha256(full_path)
             if sha256
@@ -507,7 +508,7 @@ class DirScanJob < Job
               dirs_ok = (active_dir[:dir_count] == dir[:recursive][:dir_count])
               files_ok = (active_dir[:file_count] == dir[:recursive][:file_count])
               if content_size_ok && symlinks_ok && dirs_ok && files_ok
-                # puts "\nrecursive counts match"
+                # logger.debug "recursive counts match"
                 
                 # build hashes from all our symlinks/files/dirs
                 content_hashes = []
@@ -558,17 +559,17 @@ class DirScanJob < Job
 
 
               else
-                # puts "\nrecursive counts mis-match"
-                # puts "content_size_ok: #{content_size_ok}"
-                # puts "symlinks_ok: #{symlinks_ok}"
-                # puts "dirs_ok: #{dirs_ok}"
-                # puts "files_ok: #{files_ok}"
+                # logger.debug "recursive counts mis-match"
+                # logger.debug "content_size_ok: #{content_size_ok}"
+                # logger.debug "symlinks_ok: #{symlinks_ok}"
+                # logger.debug "dirs_ok: #{dirs_ok}"
+                # logger.debug "files_ok: #{files_ok}"
               end
             end
 
-            # puts "active_dir: #{active_dir.to_yaml}"
-            # puts "dir[:recursive]: #{dir[:recursive].to_yaml}"
-            # puts "----------\n"
+            # logger.debug "active_dir: #{active_dir.to_yaml}"
+            # logger.debug "dir[:recursive]: #{dir[:recursive].to_yaml}"
+            # logger.debug "----------\n"
 
             # accumulate our totals up to our parent
             # TODO: only do this if content_hash matches for the current dir

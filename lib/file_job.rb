@@ -1,3 +1,4 @@
+require File.expand_path('logging', File.dirname(__FILE__))
 require File.join(File.dirname(__FILE__), 'pathinfo')
 require File.join(File.dirname(__FILE__), 'pipeline')
 require File.join(File.dirname(__FILE__), 'hasher')
@@ -6,6 +7,9 @@ require 'pathname'
 require 'fileutils'
 
 class FileJob < Job
+  # Mix in the ability to log stuff ...
+  include Logging
+
   attr_accessor :inputs, :outputs
 
   # calculate sah256 for a path

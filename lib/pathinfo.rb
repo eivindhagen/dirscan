@@ -1,8 +1,12 @@
+require File.expand_path('logging', File.dirname(__FILE__))
 require 'open3'
 require 'time'
 
 # PathInfo class privides easy access to metadata for a directory entry (initialized using it's path)
 class PathInfo
+  # Mix in the ability to log stuff ...
+  include Logging
+
   attr_accessor :file_path
 
   def initialize(new_file_path)

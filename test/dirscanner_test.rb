@@ -119,7 +119,7 @@ class TestDirScanJob < Test::Unit::TestCase
     outputs = {}
     ds = DirScanJob.new(inputs, outputs)
     extract_result = ds.extract
-    # puts "extract_result: #{extract_result}"
+    # logger.debug "extract_result: #{extract_result}"
     assert_equal('test_data/one_file', extract_result[:dirscan][:scan_root])
 
     dir = extract_result[:dirs]["test_data/one_file"]

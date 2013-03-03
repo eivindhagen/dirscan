@@ -1,3 +1,4 @@
+require File.expand_path('logging', File.dirname(__FILE__))
 require File.join(File.dirname(__FILE__), 'hasher')
 require File.join(File.dirname(__FILE__), 'pathinfo')
 require File.join(File.dirname(__FILE__), 'indexfile')
@@ -92,7 +93,7 @@ class IndexFileJob < Job
     DbSqlite3.open_database(input_file(:db_path)) do |db|
       # count the number of rows in the 'files' table
       files_count = db.count_rows(files_table_info)
-      puts "files_count: #{files_count}"
+      logger.info "files_count: #{files_count}"
     end
   end
 
@@ -133,7 +134,7 @@ class IndexFileJob < Job
           
         end # while
         db_out.execute "COMMIT" # commit transactions (for better performance)
-        puts "record_id after last write: #{record_id}"
+        logger.debug "record_id after last write: #{record_id}"
       end
     end # IndexFile::Reader
   end
@@ -166,19 +167,19 @@ class IndexFileJob < Job
 
       # see how many rows are in the 'files' table
       db_in1_count = db_in1.count_rows(:files)
-      puts "db_in1 has #{db_in1_count} rows"
+      logger.debug "db_in1 has #{db_in1_count} rows"
 
       # get all the records from db_in1
       sql = "SELECT * FROM files" 
       in1_rows = db_in1.execute sql
-      puts "rows to diff: #{in1_rows.count}"
+      logger.debug "rows to diff: #{in1_rows.count}"
 
       # open db_in2 so we can read from it
       DbSqlite3.open_database(db_in2_path) do |db_in2|
 
         # see how many rows are in the 'files' table
         db_in2_count = db_in2.count_rows(:files)
-        puts "db_in2 has #{db_in2_count} rows"
+        logger.debug "db_in2 has #{db_in2_count} rows"
 
         # open db_out so we can write to it
         DbSqlite3.create_database(db_out_path) do |db_out|
@@ -209,8 +210,8 @@ class IndexFileJob < Job
           end
 
           db_out.execute "COMMIT" # commit transactions (for better performance)
-          puts "num_unique: #{num_unique}"
-          puts "num_common: #{num_common}"
+          logger.debug "num_unique: #{num_unique}"
+          logger.debug "num_common: #{num_common}"
         end # db_out
       end # db_in2
     end # db_in1
@@ -255,7 +256,7 @@ class IndexFileJob < Job
 
       # see how many rows are in the 'files' table
       db_in_count = db_in.count_rows(:files)
-      puts "db_in has #{db_in_count} rows"
+      logger.debug "db_in has #{db_in_count} rows"
 
       # open db_in_large so we can read from it (to check if a record already exist or not)
       DbSqlite3.open_database(db_in_large_path) do |db_in_large|
@@ -265,19 +266,19 @@ class IndexFileJob < Job
 
           # see how many rows are in the 'files' table
           db_out_count = db_out.count_rows(:files)
-          puts "db_out has #{db_out_count} rows"
+          logger.debug "db_out has #{db_out_count} rows"
 
           # find the largest 'id' in db_out
           db_out_id_max = db_out.max_id(:files)
-          puts "db_out MAX(id): #{db_out_id_max}"
+          logger.debug "db_out MAX(id): #{db_out_id_max}"
 
           # get all the records from db_in
           # columns_string = columns_to_merge.join(',')
           # sql = "SELECT #{columns_string} FROM files" 
           sql = "SELECT * FROM files" 
-          # puts "sql: #{sql}"
+          # logger.debug "sql: #{sql}"
           in_rows = db_in.execute sql
-          puts "rows to merge: #{in_rows.count}"
+          logger.debug "rows to merge: #{in_rows.count}"
           num_added = 0
           num_skipped = 0
 
@@ -299,8 +300,8 @@ class IndexFileJob < Job
           end
 
           db_out.execute "COMMIT" # commit transactions (for better performance)
-          puts "num_added: #{num_added}"
-          puts "num_skipped: #{num_skipped}"
+          logger.info "num_added: #{num_added}"
+          logger.info "num_skipped: #{num_skipped}"
         end # db_out
       end # db_in_large
     end # db_in

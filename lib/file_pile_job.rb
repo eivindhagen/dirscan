@@ -1,9 +1,10 @@
+require File.expand_path('logging', File.dirname(__FILE__))
 require File.join(File.dirname(__FILE__), 'hasher')
 require File.join(File.dirname(__FILE__), 'hostinfo')
 require File.join(File.dirname(__FILE__), 'pathinfo')
 require File.join(File.dirname(__FILE__), 'indexfile')
 require File.join(File.dirname(__FILE__), 'pipeline')
-require File.join(File.dirname(__FILE__), 'scan_recursive')
+require File.join(File.dirname(__FILE__), 'deep_scanner')
 require File.join(File.dirname(__FILE__), 'db_sqlite3')
 
 require 'pathname'
@@ -28,10 +29,10 @@ class FilePileJob < Job
     filepile = FilePileDir.new(filepile_root)
     filedata_path = filepile.filedata
 
-    puts "store()"
-    puts " scan_root: " + scan_root
-    puts " filepile_root: " + filepile_root
-    puts " scan_index: " + scan_index
+    logger.debug "store()"
+    logger.debug " scan_root: " + scan_root
+    logger.debug " filepile_root: " + filepile_root
+    logger.debug " scan_index: " + scan_index
 
     # create scan object, contains meta-data for the entire scan
     scan_info = {
@@ -57,8 +58,8 @@ class FilePileJob < Job
       index_file.write_object(scan_info)
 
       # scan recursively
-      @scan_result = scan_recursive(index_file, scan_info, scan_root) do |path, info|
-        # puts "block: info[:type]=#{info[:type]}"
+      @scan_result = DeepScanner.scan_recursive(index_file, scan_info, scan_root) do |path, info|
+        # logger.debug "block: info[:type]=#{info[:type]}"
         case info[:type]
         when :file
           # copy this file to the FilePile area, using the sha256 checksum as the filename
@@ -91,10 +92,10 @@ class FilePileJob < Job
     filepile_root = output_file(:filepile_root)
     scan_index = output_file(:scan_index)
 
-    puts "store_update()"
-    puts " scan_root: " + scan_root
-    puts " filepile_root: " + filepile_root
-    puts " scan_index: " + scan_index
+    logger.info "store_update()"
+    logger.info " scan_root: " + scan_root
+    logger.info " filepile_root: " + filepile_root
+    logger.info " scan_index: " + scan_index
 
     filepile = FilePileDir.new(filepile_root)
     filedata_path = filepile.filedata
@@ -126,8 +127,8 @@ class FilePileJob < Job
         index_file.write_object(scan_info)
 
         # scan recursively
-        @scan_result = scan_recursive(index_file, scan_info, scan_root, db) do |path, info|
-          # puts "block: info[:type]=#{info[:type]}"
+        @scan_result = DeepScanner.scan_recursive(index_file, scan_info, scan_root, db) do |path, info|
+          # logger.debug "block: info[:type]=#{info[:type]}"
           case info[:type]
           when :dir
             # do nothing
@@ -136,9 +137,9 @@ class FilePileJob < Job
             # skip copying if the file already exist in FilePile
             if info[:sha256] # if :sha256 value exist, then it's because we got this from the FilePile database # [:exists_in_filepile]
               # FOUND in db, so don't worry about copying file since it's already there
-              # puts "#{info[:name]} : FOUND in DB"
+              # logger.debug "#{info[:name]} : FOUND in DB"
             else
-              # puts "#{info[:name]} : NOT in DB"
+              # logger.debug "#{info[:name]} : NOT in DB"
               # copy this file to the FilePile area, using the sha256 checksum as the filename
               src_path = File.join(path, info[:name])
               dst_name = info[:sha256]

@@ -1,3 +1,5 @@
+require File.expand_path('logging', File.dirname(__FILE__))
+
 #
 # DbSqlite3 class - abstraction to make it easier to use SQLite3 databases within FilePile
 #
@@ -5,6 +7,8 @@
 require 'sqlite3'
 
 class DbSqlite3
+  # Mix in the ability to log stuff ...
+  include Logging
 
   # init new instance
   private
@@ -20,7 +24,7 @@ class DbSqlite3
 
   public
   def execute(sql)
-    # puts "executing sql: #{sql}"
+    # logger.debug "executing sql: #{sql}"
     @db.execute(sql) if @db
   end
 
@@ -80,7 +84,6 @@ class DbSqlite3
     end.join(", ")
     table_name = table_info[:table_name]
     sql = "CREATE TABLE IF NOT EXISTS #{table_name}(#{columns_string})" 
-    puts "sql: #{sql}"
     execute sql
 
     # also create an index to make future SELECT statements faster
@@ -90,7 +93,6 @@ class DbSqlite3
       col_def
     end.join(", ")
     sql = "CREATE INDEX IF NOT EXISTS #{table_name}_index_all_unique_columns ON #{table_name}(#{columns_string})" 
-    puts "sql: #{sql}"
     execute sql
   end
 
@@ -119,9 +121,9 @@ class DbSqlite3
       db_sqlite3.close
 
     rescue SQLite3::Exception => e 
-      puts "SQLite3::Exception occured"
-      puts e.message
-      puts e.backtrace
+      logger.error "SQLite3::Exception occured"
+      logger.error e.message
+      logger.error e.backtrace
       db_sqlite3.close
 
     end
@@ -158,9 +160,9 @@ class DbSqlite3
       db_sqlite3.close
 
     rescue SQLite3::Exception => e 
-      puts "SQLite3::Exception occured"
-      puts e.message
-      puts e.backtrace
+      logger.error "SQLite3::Exception occured"
+      logger.error e.message
+      logger.error e.backtrace
       db_sqlite3.close if db_sqlite3
 
     end
@@ -324,7 +326,6 @@ class DbSqlite3
     end.join(",")
 
     sql = "INSERT INTO files VALUES(#{values_string})"
-    # puts "sql: #{sql}"
     execute sql
   end
 
@@ -352,7 +353,6 @@ class DbSqlite3
     end.join(",")
 
     sql = "INSERT INTO #{table_name} VALUES(#{values_string})"
-    # puts "sql: #{sql}"
     execute sql
   end
 
@@ -379,7 +379,7 @@ class DbSqlite3
     # get all the records from db
     sql = "SELECT * FROM files" 
     rows = execute sql
-    puts "file records: #{rows.size}"
+    logger.debug "file records: #{rows.size}"
 
     num_added = 0
     num_skipped = 0
@@ -396,9 +396,9 @@ class DbSqlite3
         num_skipped += 1
       end
     end
-    puts "import summary:"
-    puts "  files added: #{num_added}"
-    puts "  files skipped: #{num_skipped}"
+    logger.debug "import summary:"
+    logger.debug "  files added: #{num_added}"
+    logger.debug "  files skipped: #{num_skipped}"
   end
 
 end

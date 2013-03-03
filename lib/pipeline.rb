@@ -9,6 +9,7 @@
 #
 # Pipeline : Executes a chain of workers, in a predetermined order. Uses Workers to decide if the work needs to be done, or can be skipped.
 
+require File.expand_path('logging', File.dirname(__FILE__))
 require 'debugger'
 require 'yaml'
 
@@ -27,6 +28,9 @@ end
 # By inheriting from the Job class, your job class have easy access to
 # the input and output arguments, which are broken down into files & values
 class Job
+  # Mix in the ability to log stuff ...
+  include Logging
+
   def initialize(inputs, outputs)
     @inputs = inputs || {}
     @outputs = outputs || {}
@@ -157,6 +161,9 @@ end
 # This plain Worker class will perform the worker even if all the work turns out to be redundant,
 # i.e. it's not very smart about skipping work that has already been done
 class Worker
+  # Mix in the ability to log stuff ...
+  include Logging
+
   def initialize(worker_config)
     @config = worker_config
   end
@@ -202,7 +209,7 @@ class Worker
   end
 
   def run(options = {})
-    # puts "running worker: #{self}" if options[:debug_level] == :all
+    # logger.debug "running worker: #{self}" if options[:debug_level] == :all
     # create instance of the job class, with the given inputs & outputs
     obj = ruby_class.new(inputs, outputs)
     # call the job method
@@ -210,7 +217,7 @@ class Worker
   end
 
   def simulate(options = {})
-    # puts "simulating worker: #{self}" if options[:debug_level] == :all
+    # logger.debug "simulating worker: #{self}" if options[:debug_level] == :all
     "#{ruby_class}.new(#{inputs}, #{outputs}).#{ruby_method}(#{options})"
   end
 end
@@ -233,20 +240,20 @@ class LazyWorker < Worker
 
   def run(options = {})
     if output_stale?
-      puts "performing worker #{self} because output is stale" if options[:debug_level] == :all
+      logger.debug "performing worker #{self} because output is stale"
       super(options)
     else
-      puts "skipping worker #{self} because output is fresh" if options[:debug_level] == :all
+      logger.debug "skipping worker #{self} because output is fresh"
       nil
     end
   end
 
   def simulate(options = {})
     if output_stale?
-      puts "performing worker #{self} because output is stale" if options[:debug_level] == :all
+      logger.debug "performing worker #{self} because output is stale"
       super(options)
     else
-      puts "skipping worker #{self} because output is fresh" if options[:debug_level] == :all
+      logger.debug "skipping worker #{self} because output is fresh"
       nil
     end
   end
@@ -268,8 +275,8 @@ class DependencyWorker < LazyWorker
 
     input_modify_times = modify_times_for_files(input_files)
     output_modify_times = modify_times_for_files(output_files)
-    # puts "input files: #{input_modify_times.to_yaml}"
-    # puts "output files: #{output_modify_times.to_yaml}"
+    # logger.debug "input files: #{input_modify_times.to_yaml}"
+    # logger.debug "output files: #{output_modify_times.to_yaml}"
     input_modify_times.values.max >= output_modify_times.values.min # true if newest input file is newer than oldest output file
   end
 
@@ -282,6 +289,9 @@ end
 #
 # The run() and simulate() methods create Worker objects, which in turn execute Job methods to do the work.
 class Pipeline
+  # Mix in the ability to log stuff ...
+  include Logging
+
   def initialize(pipeline_config, options = {})
     @config = pipeline_config
     @options = options

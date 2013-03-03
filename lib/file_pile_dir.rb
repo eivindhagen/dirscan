@@ -1,5 +1,10 @@
+require File.expand_path('logging', File.dirname(__FILE__))
+
 # manages the directory structure for a File Pile
 class FilePileDir
+  # Mix in the ability to log stuff ...
+  include Logging
+
   private
   def dir_structure
     [
@@ -14,15 +19,15 @@ class FilePileDir
   # the necessary directories will be created if they do not already exist
   public
   def initialize(filepile_root)
-    puts "FilePileDir::initialize(#{filepile_root})"
+    logger.debug "FilePileDir::initialize(#{filepile_root})"
     @root = filepile_root
 
     # ensure the root folder exist, or create it
     unless Dir.exist?(@root)
       FileUtils.mkdir_p(@root)
-      puts "root created: #{@root}"
+      logger.debug "root created: #{@root}"
     else
-      puts "root exists: #{@root}"
+      logger.debug "root exists: #{@root}"
     end
 
     # ensure each standard sub-dir exist, or create it
@@ -30,9 +35,9 @@ class FilePileDir
       fullpath = File.join @root, dir[:path]
       unless Dir.exist? fullpath
         FileUtils.mkdir_p fullpath
-        puts "sub-dir created: #{fullpath}"
+        logger.debug "sub-dir created: #{fullpath}"
       else
-        puts "sub-dir exists: #{fullpath}"
+        logger.debug "sub-dir exists: #{fullpath}"
       end
     end
   end

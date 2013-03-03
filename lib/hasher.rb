@@ -1,9 +1,13 @@
+require File.expand_path('logging', File.dirname(__FILE__))
 require 'digest'
 
 HASH_SRC_SPLIT = '+'
 HASH_SRC_JOIN = '+'
 
 class StringHash
+  # Mix in the ability to log stuff ...
+  include Logging
+
   def self.md5(string)
     Digest::MD5.hexdigest(string.to_s)
   end
@@ -14,6 +18,9 @@ class StringHash
 end
 
 class FileHash
+  # Mix in the ability to log stuff ...
+  include Logging
+
   def self.md5(file_path)
     begin
       Digest::MD5.file(file_path).hexdigest
@@ -32,6 +39,9 @@ class FileHash
 end
 
 class Hasher
+  # Mix in the ability to log stuff ...
+  include Logging
+
   # replaces each <entry> found in the hash_template with it's corresponding value from the info hash
   # NOTE: the info hash keys should be symbols (NOT string).
   def initialize(template, info)
