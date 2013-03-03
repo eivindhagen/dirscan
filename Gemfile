@@ -35,3 +35,6 @@ group :development do
 
   gem 'debugger'
 end
+
+gem 'data_mapper'
+gem 'dm-sqlite-adapter'
