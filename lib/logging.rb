@@ -33,7 +33,7 @@ module Logging
 
   # Use a hash class-ivar to cache a unique Logger per class:
   @loggers = {}
-  @default_log_level = Logger::INFO
+  @default_log_level = Logger::INFO # if log leve is not specified, then default to INFO (whch omits DEBUG messages, but shows everything else)
 
   class << self
     def set_default_log_level(level)

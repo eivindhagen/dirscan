@@ -1,3 +1,6 @@
+# FileInfoDb is a class that uses DataMapper to store FileInfo objects in a SQLite3 database
+
+# dependencies
 require 'pathname'
 
 require 'rubygems'
@@ -5,6 +8,10 @@ require 'data_mapper' # requires all the gems listed above
 require 'dm-sqlite-adapter' # SQLite3 support with DataMapper
 
 require File.expand_path('logging', File.dirname(__FILE__))
+
+#
+# global setup
+#
 
 # If you want the logs displayed you have to do this before the call to setup
 DataMapper::Logger.new('log/datamapper.log', :debug)
@@ -14,8 +21,7 @@ DataMapper.setup(:default, 'sqlite::memory:')
 DataMapper.finalize
 
 
-
-
+# wrapper class, which represents the database file itself
 class FileInfoDb
   # Mix in the ability to log stuff ...
   include Logging

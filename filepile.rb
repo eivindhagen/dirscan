@@ -224,6 +224,60 @@ class Command
     return Pipeline.new(pipeline_config)
   end
 
+  def create_pipeline_for_store_smaller_steps(scan_root, filepile_root)
+    # create the FilePile directory structure
+    filepile = FilePileDir.new(filepile_root)
+
+    timestamp = Time.now.to_i
+    checksum = StringHash.md5(HostInfo.name + scan_root + filepile_root) # make it unique to avoid file name collisions
+    # TODO: Write to temp DB, and merge into metadata DB as the last step...
+    # temp_db_path = File.join(filepile.temp, "#{timestamp}_#{checksum}.sqlite3")
+    temp_db_path = File.join(filepile.metadata, "db.sqlite3")
+    temp_db_dump_path = File.join(filepile.temp, "#{timestamp}_#{checksum}.sqlite3.dump")
+
+    pipeline_config = {
+      jobs: {
+        scan_to_db: { # scan a directory and add info for each dir & file to the DB
+          inputs: {
+            files: {
+              scan_root: scan_root,
+            }
+          },
+          outputs: {
+            files: {
+              db_path: temp_db_path,
+            },
+          },
+          job: {
+            ruby_class: :FilePileJob,
+            ruby_method: :scan_to_db,
+          }
+        },
+        # db_dump: { # unpack the index file, writing a text version of the file
+        #   inputs: {
+        #     files: {
+        #       db_path: temp_db_path,
+        #     }
+        #   },
+        #   outputs: {
+        #     files: {
+        #       db_dump_path: temp_db_dump_path,
+        #     },
+        #   },
+        #   job: {
+        #     ruby_class: :FileInfoDbJob,
+        #     ruby_method: :dump,
+        #   }
+        # },
+
+      },
+
+      job_order: [:scan_to_db], # , :db_dump],
+    }
+
+    return Pipeline.new(pipeline_config)
+  end
+
   def create_pipeline_for_unpack(scan_index, scan_unpack)
     pipeline_config = {
       jobs: {
@@ -577,8 +631,7 @@ class Command
 
       logger.info "storing dir '#{scan_root}' to FilePile '#{filepile_root}'"
 
-      pipeline = create_pipeline_for_store(scan_root, filepile_root)
-      pipeline.add_options(debug_level: :all)
+      pipeline = create_pipeline_for_store_smaller_steps(scan_root, filepile_root)
       pipeline.run(Worker) # Use the 'Worker' class to make it run even if the output folder exist
 
     when 'store_update'
@@ -591,7 +644,6 @@ class Command
       filepile_root = args[2].split('\\').join('/')
 
       pipeline = create_pipeline_for_store_update(scan_root, filepile_root)
-      pipeline.add_options(debug_level: :all)
       pipeline.run(Worker) # Use the 'Worker' class to make it run even if the output folder exist
 
     when 'unpack'
@@ -761,8 +813,6 @@ class Command
   end
 
   def execute(args)
-    log_level = Logger::INFO
-
     trimmed_args = []
 
     state = :none
@@ -770,14 +820,13 @@ class Command
       case arg
       when '-log'
         log_level = log_level_from_string(args[arg_index + 1])
+        Logging.set_default_log_level(log_level)
         args.delete_at(arg_index + 1)
         next
       end
 
       trimmed_args.push arg
     end
-
-    Logging.set_default_log_level(log_level)
 
     start_time = Time.now
 

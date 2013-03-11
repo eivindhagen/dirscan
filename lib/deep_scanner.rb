@@ -281,4 +281,144 @@ class DeepScanner
     return dir_info_final
   end
 
+  # scan a directory and all it's sub-directories (recursively) and process all entries along teh way
+  #
+  # Consider this example directory tree:
+  #   dir-a
+  #     file-1
+  #     symlink-x
+  #     file-2
+  #     dir-b
+  #       file 3
+  #
+  # The records would be written in this order (dir records are written twice, first initial, then final):
+  #   dir-a (initial)
+  #   file-1
+  #   symlink-x
+  #   file-2
+  #   dir-b (initial)
+  #   file-3
+  #   dir-b (final)
+  #   dir-a (final)
+  #
+  def self.scan_recursive_simple(scan_info, path, &block)
+    logger.debug "#{path}"
+
+    base_path = Pathname.new(path)
+
+    pathinfo = PathInfo.new(path)
+
+    # write initial dir record
+    dir_info = {
+      :type => :dir,
+      :path => path,
+      :name => File.basename(path),
+      :mode => pathinfo.mode,
+      # :ctime => pathinfo.create_time,
+      :mtime => pathinfo.modify_time,
+      :owner => pathinfo.owner,
+      :group => pathinfo.group,
+    }
+
+    yield(path, dir_info) if block_given?
+
+    symlinks = []
+    dirs = []
+    files = []
+    content_size = 0
+    content_hashes = []
+    meta_hashes = []
+
+    #
+    # process each entry in the current directory, capturing relevant metadata for each entry
+    #
+    Dir[File.join(base_path, '{*,.*}')].sort.each do |full_path|  # sort is important for deterministic content hash
+                                                                  # for the entire dir
+      logger.debug "scan: #{full_path}"
+      pathinfo = PathInfo.new(full_path)
+      name = Pathname.new(full_path).relative_path_from(base_path).to_s # .to_s converts from Pathname to actual string
+      case name
+      when '.'  # current dir
+      when '..' # parent dir
+      else
+
+        if File.symlink?(full_path)
+          symlinks << name
+
+          # get the sie of the symlink itself (not the size of what it's pointing at)
+          # size = File.lstat(full_path).size
+          # DO NOT NEED THIS since a symlink does not count as real content (a folder is not real content either, only files are)
+
+          symlink_info = {
+            :type => :symlink,
+            :name => name,
+            :link_path => File.readlink(full_path),
+            :mode => pathinfo.mode,
+            # :ctime => pathinfo.create_time,
+            :mtime => pathinfo.modify_time,
+            :owner => pathinfo.owner,
+            :group => pathinfo.group,
+          }
+          yield(path, symlink_info) if block_given?
+       
+        elsif Dir.exist?(full_path)
+          # recurse into sub dirs after completing this dir scan, tally things up at the end...
+          dirs << name
+        
+        elsif File.exist?(full_path)
+          files << name
+
+          size = File.size(full_path)
+          content_size += size
+
+          file_info = {
+            :type => :file,
+            :name => name,
+            :size => size,
+            :mode => pathinfo.mode,
+            # :ctime => pathinfo.create_time,
+            :mtime => pathinfo.modify_time,
+            :owner => pathinfo.owner,
+            :group => pathinfo.group,
+
+            :path => path,  # this is only here so that we can use it to query the FilePile DB to see if an iedntical metadata record exist
+          }
+          yield(path, file_info) if block_given?
+        
+        else
+          unknown_info = {
+            :type => :unknown,
+            :name => name
+          }
+          yield(path, unknown_info) if block_given?
+        
+        end
+      end
+    end
+
+    # recurse into each dir
+    if dirs.count > 0
+      dirs.each do |dir|
+        sub_dir_path =  File.join(path, dir)
+
+        # check if we should ignore this sub-dir
+        skip = false
+        if scan_info[:ignore_filters]
+          scan_info[:ignore_filters].each do |filter|
+            if sub_dir_path.index(filter)
+              logger.debug "Ignoring subdir #{dir} [filter '#{filter}' matches '#{sub_dir_path}']"
+              skip = true
+              # if we are skipping entire sub-dirs then we cannot accurately calculate the full recursive content hash...
+            end
+          end
+        end
+        next if skip
+
+        # perform the recursive scan and collect the metadata for it
+        logger.debug "Scanning subdir #{dir} of #{path}" if scan_info[:verbose]
+        sub_dir_info = scan_recursive_simple(scan_info, sub_dir_path, &block)
+      end
+    end
+  end
+
 end

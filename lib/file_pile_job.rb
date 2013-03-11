@@ -6,6 +6,7 @@ require File.join(File.dirname(__FILE__), 'indexfile')
 require File.join(File.dirname(__FILE__), 'pipeline')
 require File.join(File.dirname(__FILE__), 'deep_scanner')
 require File.join(File.dirname(__FILE__), 'db_sqlite3')
+require File.join(File.dirname(__FILE__), 'file_info_db')
 
 require 'pathname'
 require 'json'
@@ -165,6 +166,70 @@ class FilePileJob < Job
 
       end # index_file
     end # db
+  end
+
+  # scan a directory and add info for each file to the DB
+  #
+  #
+  def scan_to_db(options = {})
+    required_input_files :scan_root
+    required_output_files :db_path
+
+    scan_root = input_file(:scan_root)
+    db_path = output_file(:db_path)
+
+    logger.info "scan_to_db()"
+    logger.info " scan_root: " + scan_root
+    logger.info " db_path: " + db_path
+
+    db = FileInfoDb.new(db_path)
+
+    # create scan object, contains meta-for data the entire scan
+    timestamp = Time.now.to_i
+    scan_info = {
+      :type => :store_update,
+      :host_name => HostInfo.name,
+      :scan_root => input_file(:scan_root),
+      :scan_root_real => Pathname.new(input_file(:scan_root)).realpath,  # turn scan_root into the canonical form, making it absolute, with no symlinks
+      :timestamp => timestamp,
+      :db_path => db_path,
+      :verbose => input_value(:verbose, :default => false),
+    }
+
+    # templates specify how to create the hash source strings for various dir entry types
+    scan_info.merge!({
+      :symlink_hash_template  => 'name+mode+owner+group+mtime+link_path'.freeze, # size of symlink itself, not the target
+      :file_hash_template     => 'name+mode+owner+group+mtime+size+sha256'.freeze,  # size and content hash
+      :dir_hash_template      => 'name+mode+owner+group+mtime+content_size+content_hash+meta_hash'.freeze,  # size/hash of dir's content
+    })
+
+    # log scan_info for posterity
+    # TODO: store this in the DB as well, in another table
+    logger.info scan_info.to_yaml
+
+    # scan recursively (wihtout a DB to check for existing sha256, since we want this scan to be as simple as possible)
+    @scan_result = DeepScanner.scan_recursive_simple(scan_info, scan_root) do |path, info|
+      # logger.debug "block: info[:type]=#{info[:type]}"
+      case info[:type]
+      when :dir
+        # do nothing
+
+      when :file
+        # file_info = FileInfoDb::FileInfo.create({
+        #   type: 1,  # 1 = File
+        #   name: info[:name],
+        #   size: info[:size,
+        #   mode: info[:mode],
+        #   mtime: info[:mtime],
+        #   own: info[:owner],
+        #   grp: info[:group],
+        #   sha256: nil,
+        #   path: info[:path],
+        # })
+      end
+    end
+
+    return @scan_result
   end
 
 end # class FilePileJob
