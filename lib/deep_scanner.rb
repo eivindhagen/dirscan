@@ -190,8 +190,24 @@ class DeepScanner
 
     if dirs.count > 0
       dirs.each do |dir|
+        sub_dir_path =  File.join(path, dir)
+
+        # check if we should ignore this sub-dir
+        skip = false
+        if scan_info[:ignore_filters]
+          scan_info[:ignore_filters].each do |filter|
+            if sub_dir_path.index(filter)
+              logger.debug "Ignoring subdir #{dir} [filter '#{filter}' matches '#{sub_dir_path}']"
+              skip = true
+              # if we are skipping entire sub-dirs then we cannot accurately calculate the full recursive content hash...
+            end
+          end
+        end
+        next if skip
+
+        # perform the recursive scan and collect the metadata for it
         logger.debug "Scanning subdir #{dir} of #{path}" if scan_info[:verbose]
-        sub_dir_info = scan_recursive(index_file, scan_info, File.join(path, dir), db, &block)
+        sub_dir_info = scan_recursive(index_file, scan_info, sub_dir_path, db, &block)
 
         #
         # accumulation (for current level onlY)

@@ -43,6 +43,10 @@ class FilePileJob < Job
       :timestamp => timestamp,
       :index_path => scan_index,
       :verbose => input_value(:verbose, :default => false),
+      :ignore_filters => [
+        "/AppData/Local",
+        "/AppData/Roaming",
+      ]
     }
 
     # templates specify how to create the hash source strings for various dir entry types
@@ -65,11 +69,15 @@ class FilePileJob < Job
           # copy this file to the FilePile area, using the sha256 checksum as the filename
           src_path = File.join(path, info[:name])
           dst_name = info[:sha256]
-          dst_dir = File.join(filedata_path, dst_name[0..1], dst_name[2..3], dst_name[4..5])
-          dst_path = File.join(dst_dir, dst_name)
-          unless File.exist?(dst_path)
-            FileUtils.mkdir_p(dst_dir) unless Dir.exist?(dst_dir)
-            FileUtils.copy_file(src_path, dst_path)
+          if dst_name
+            dst_dir = File.join(filedata_path, dst_name[0..1], dst_name[2..3], dst_name[4..5])
+            dst_path = File.join(dst_dir, dst_name)
+            unless File.exist?(dst_path)
+              FileUtils.mkdir_p(dst_dir) unless Dir.exist?(dst_dir)
+              FileUtils.copy_file(src_path, dst_path)
+            end
+          else
+            puts "ERROR: No sha256 value for path '#{src_path}'"
           end
         end
       end
